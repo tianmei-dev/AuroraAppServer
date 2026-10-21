@@ -1,0 +1,20 @@
+# Isolated MySQL for integration tests. Does NOT use the local aurora_app database.
+services:
+  mysql-it:
+    image: mysql:8.4
+    container_name: aurora-mysql-it
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_DATABASE: aurora_app_test
+      MYSQL_USER: test
+      MYSQL_PASSWORD: test
+      MYSQL_ROOT_PASSWORD: testroot
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-ptestroot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20

@@ -1,0 +1,56 @@
+spring:
+  application:
+    name: aurora-app-server
+  profiles:
+    default: local
+  datasource:
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:aurora_app}?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&connectionTimeZone=UTC
+    username: ${DB_USERNAME:aurora}
+    password: ${DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        connection:
+          characterEncoding: utf8mb4
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    encoding: UTF-8
+  jackson:
+    time-zone: UTC
+    serialization:
+      write-dates-as-timestamps: false
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: false
+
+logging:
+  level:
+    root: INFO
+    com.aurora.appserver: INFO
+    org.springframework.security: WARN

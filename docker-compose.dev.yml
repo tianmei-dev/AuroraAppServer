@@ -1,0 +1,30 @@
+# Local development MySQL for S1.1 manual acceptance.
+# Isolated from docker-compose.test.yml (port 3307 / aurora_app_test).
+# Usage: copy .env.example → .env, then: docker compose -f docker-compose.dev.yml up -d
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: aurora-mysql-dev
+    ports:
+      - "3308:3306"
+    environment:
+      MYSQL_DATABASE: aurora_app
+      MYSQL_USER: ${MYSQL_USER:-aurora}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+    volumes:
+      - aurora_mysql_dev_data:/var/lib/mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+volumes:
+  aurora_mysql_dev_data:
+    name: aurora_mysql_dev_data
