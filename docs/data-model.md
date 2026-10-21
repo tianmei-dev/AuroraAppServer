@@ -1,13 +1,23 @@
-# 数据模型（S1.1）
+# 数据模型（S1.1 / S1.2）
 
 ## 数据库
 
-- 名称：`aurora_app`
+- 名称：`aurora_app`（开发）/ `aurora_app_test`（集成测试）
 - 字符集：`utf8mb4` / `utf8mb4_unicode_ci`
 - 时区：UTC（连接与 Hibernate `jdbc.time_zone=UTC`）
 - Schema 管理：仅 Flyway（`jpa.hibernate.ddl-auto=validate`）
 
-## 表：`apps`
+## 表关系（概览）
+
+```text
+apps
+  ├── users (app_id)
+  │     ├── wechat_identities (app_id, user_id)  -- 复合 FK → users(app_id, id)
+  │     └── auth_sessions     (app_id, user_id)  -- 复合 FK → users(app_id, id)
+  └── device_trials (app_id)
+```
+
+## 表：`apps`（S1.1）
 
 | 列 | 类型 | 约束 | 说明 |
 |----|------|------|------|
@@ -17,36 +27,89 @@
 | `platform` | VARCHAR(32) | NOT NULL, CHECK ∈ {ANDROID} | 平台 |
 | `package_name` | VARCHAR(255) | NOT NULL | Android 包名 |
 | `status` | VARCHAR(32) | NOT NULL, CHECK ∈ {ACTIVE, DISABLED} | 状态 |
-| `created_at` | TIMESTAMP(3) | NOT NULL, UTC | 创建时间 |
-| `updated_at` | TIMESTAMP(3) | NOT NULL, UTC, ON UPDATE | 更新时间 |
+| `created_at` / `updated_at` | TIMESTAMP(3) | NOT NULL, UTC | 时间 |
 
-### 唯一约束
+唯一约束：`app_code`；`(platform, package_name)`。
 
-1. `uk_apps_app_code`：`app_code`
-2. `uk_apps_platform_package`：`(platform, package_name)`
+种子：`calculator_vault` / 隐藏计算器 / `com.aurora.calculatorvault` / ACTIVE。
 
-### 索引
+## 表：`users`（S1.2）
 
-- `idx_apps_status`
-- `idx_apps_package_name`
+| 列 | 类型 | 约束 | 说明 |
+|----|------|------|------|
+| `id` | BIGINT | PK, AI | 内部用户 ID（按 App 独立） |
+| `app_id` | BIGINT | NOT NULL, FK → apps.id | 应用归属 |
+| `status` | VARCHAR(32) | CHECK ∈ {ACTIVE, DISABLED} | 状态 |
+| `created_at` / `updated_at` | TIMESTAMP(3) | NOT NULL | 时间 |
 
-## 种子数据
+关键约束：
 
-| app_code | app_name | platform | package_name | status |
-|----------|----------|----------|--------------|--------|
-| `calculator_vault` | 隐藏计算器 | ANDROID | `com.aurora.calculatorvault` | ACTIVE |
+- `uk_users_app_id_id UNIQUE (app_id, id)` — 供复合外键引用
+- `fk_users_app`
 
-迁移文件：
+## 表：`wechat_identities`（S1.2）
+
+| 列 | 类型 | 约束 | 说明 |
+|----|------|------|------|
+| `id` | BIGINT | PK, AI | |
+| `app_id` | BIGINT | NOT NULL, FK → apps.id | |
+| `user_id` | BIGINT | NOT NULL | 与 app_id 组成复合 FK |
+| `wechat_appid` | VARCHAR(64) | NOT NULL | 该 App 的微信开放平台 AppId |
+| `openid` | VARCHAR(128) | NOT NULL | |
+| `unionid` | VARCHAR(128) | **可空** | 不作为必填 |
+| `created_at` / `updated_at` | TIMESTAMP(3) | | |
+
+约束：
+
+- `UNIQUE (app_id, wechat_appid, openid)`
+- `FOREIGN KEY (app_id, user_id) REFERENCES users(app_id, id)`
+
+**不存储**微信授权 code / access_token。
+
+同一 OpenID 可在不同 App 绑定不同 `user_id`；同一 App 内不可重复。
+
+## 表：`auth_sessions`（S1.2）
+
+| 列 | 类型 | 约束 | 说明 |
+|----|------|------|------|
+| `id` | BIGINT | PK, AI | |
+| `app_id` | BIGINT | NOT NULL, FK → apps.id | |
+| `user_id` | BIGINT | NOT NULL | 复合 FK → users |
+| `token_hash` | VARCHAR(128) | NOT NULL, UNIQUE | 仅存哈希 |
+| `expires_at` | TIMESTAMP(3) | NOT NULL | |
+| `revoked_at` | TIMESTAMP(3) | 可空 | |
+| `created_at` | TIMESTAMP(3) | NOT NULL | |
+
+约束：
+
+- `FOREIGN KEY (app_id, user_id) REFERENCES users(app_id, id)`
+- `UNIQUE (token_hash)`
+
+**不存储**明文 Token。会话与用户必须同属一个 App（由复合 FK 保证）。
+
+## 表：`device_trials`（S1.2）
+
+| 列 | 类型 | 约束 | 说明 |
+|----|------|------|------|
+| `id` | BIGINT | PK, AI | |
+| `app_id` | BIGINT | NOT NULL, FK → apps.id | |
+| `device_key_hash` | VARCHAR(128) | NOT NULL | 设备标识哈希 |
+| `first_seen_at` | TIMESTAMP(3) | NOT NULL | |
+| `trial_started_at` | TIMESTAMP(3) | NOT NULL | |
+| `trial_expires_at` | TIMESTAMP(3) | NOT NULL | 字段预留；S1.2 不计算 72h |
+| `created_at` / `updated_at` | TIMESTAMP(3) | | |
+
+约束：`UNIQUE (app_id, device_key_hash)`。
+
+**不存储**原始设备标识。同一设备哈希可在不同 App 各有一条试用记录。
+
+## 迁移文件
 
 - `V1__create_apps_table.sql`
 - `V2__seed_calculator_vault.sql`
+- `V3__create_account_and_trial_tables.sql`
 
 ## 后续表（未实现）
 
-所有业务表默认应包含明确的 `app_id` 外键，例如：
-
-- `users.app_id`
-- `auth_sessions.app_id`
-- `device_trials.app_id`
 - `memberships.app_id`
 - `orders.app_id`

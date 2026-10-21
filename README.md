@@ -54,21 +54,30 @@ Copy-Item src\main\resources\application-local.yml.example src\main\resources\ap
 
 ### 4. 启动 Server 与健康检查
 
-首次使用建议把 Gradle 用户目录放到 D 盘（避免 C 盘空间不足 / 外网下载超时）。本机可复用已准备好的离线包：
+首次使用建议把 Gradle 用户目录放到 D 盘（避免 C 盘空间不足 / 外网下载超时）。本机离线包与缓存已约定：
 
-`D:\Android_Work_Server\tools\gradle-8.14.3-bin.zip`
+- 离线 zip：`D:\Android_Work_Server\tools\gradle-8.14.3-bin.zip`
+- 缓存目录：`D:\Android_Work_Server\.gradle-home`（勿删；已预置 8.14.3）
+
+**VS Code / 终端推荐（不再访问 services.gradle.org）：**
+
+```powershell
+# 新开终端后任选其一
+.\bootRun.bat
+
+# 或（需已设置 GRADLE_USER_HOME，见下方）
+.\gradlew.bat bootRun
+```
+
+若直接跑 `.\gradlew.bat` 仍去下载，先执行：
 
 ```powershell
 $env:GRADLE_USER_HOME = "D:\Android_Work_Server\.gradle-home"
 $env:TEMP = "D:\Android_Work_Server\.tmp"
 $env:TMP = $env:TEMP
-
-# 方式 A（推荐）：项目脚本
-.\scripts\bootRun.ps1
-
-# 方式 B：等价手动命令
-.\gradlew.bat bootRun
 ```
+
+项目已提供 `.vscode/settings.json`，在 VS Code 中**新开终端**会自动带上上述环境变量。
 
 ```powershell
 Invoke-RestMethod http://localhost:8080/actuator/health
