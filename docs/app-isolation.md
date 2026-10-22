@@ -44,6 +44,7 @@ FOREIGN KEY (app_id, user_id) REFERENCES users (app_id, id)
 | 同一 App 内重复 `(wechat_appid, openid)` | **拒绝** |
 | 同一 `device_key_hash` 在不同 App | **允许各一条试用** |
 | 未知 `app_id` | **FK 拒绝** |
+| 同一 `deviceKey` 经 HMAC 后按 App 隔离 | **不同 App 哈希不同**（输入含 app_code） |
 
 Repository 业务查询一律带 `appId`，例如：
 

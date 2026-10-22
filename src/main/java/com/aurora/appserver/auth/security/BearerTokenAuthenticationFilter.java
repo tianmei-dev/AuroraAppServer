@@ -44,7 +44,8 @@ public class BearerTokenAuthenticationFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
         return path.startsWith("/actuator/health")
-                || path.equals("/api/v1/auth/wechat/login");
+                || path.equals("/api/v1/auth/wechat/login")
+                || path.equals("/api/v1/trial/device/activate");
     }
 
     @Override

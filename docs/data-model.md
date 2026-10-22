@@ -87,21 +87,21 @@ apps
 
 **不存储**明文 Token。会话与用户必须同属一个 App（由复合 FK 保证）。
 
-## 表：`device_trials`（S1.2）
+## 表：`device_trials`（S1.2 结构 / S3.1 业务）
 
 | 列 | 类型 | 约束 | 说明 |
 |----|------|------|------|
-| `id` | BIGINT | PK, AI | |
+| `id` | BIGINT | PK, AI | 不对外返回 |
 | `app_id` | BIGINT | NOT NULL, FK → apps.id | |
-| `device_key_hash` | VARCHAR(128) | NOT NULL | 设备标识哈希 |
-| `first_seen_at` | TIMESTAMP(3) | NOT NULL | |
-| `trial_started_at` | TIMESTAMP(3) | NOT NULL | |
-| `trial_expires_at` | TIMESTAMP(3) | NOT NULL | 字段预留；S1.2 不计算 72h |
+| `device_key_hash` | VARCHAR(128) | NOT NULL | HMAC-SHA256 hex，非原始 key |
+| `first_seen_at` | TIMESTAMP(3) | NOT NULL | 首次登记（UTC） |
+| `trial_started_at` | TIMESTAMP(3) | NOT NULL | = 首次登记时间 |
+| `trial_expires_at` | TIMESTAMP(3) | NOT NULL | started + 72h |
 | `created_at` / `updated_at` | TIMESTAMP(3) | | |
 
 约束：`UNIQUE (app_id, device_key_hash)`。
 
-**不存储**原始设备标识。同一设备哈希可在不同 App 各有一条试用记录。
+S3.1 **未新增迁移**：复用 V3 表；无 V4。
 
 ## 迁移文件
 

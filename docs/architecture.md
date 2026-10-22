@@ -1,4 +1,4 @@
-# 架构总览（S1.1 / S1.2 / S2.1）
+# 架构总览（S1.1 / S1.2 / S2.1 / S3.1）
 
 ## 目标
 
@@ -9,47 +9,37 @@
 
 **方案 A：各 App 账号独立。**
 
-- 同一自然人在不同 App 中是不同用户。
-- 不共享会员、不共享订单、不共享试用额度。
-- 微信登录配置、支付商户配置均按 App 管理。
-
 ## 运行形态
 
 ```
 Android App A ──┐
-Android App B ──┼──► AuroraAppServer (单体) ──► MySQL aurora_app
-Android App C ──┘         │                      ▲
-                          └── Actuator /health    │
-                                                  WeChat OAuth (服务端换 code)
+Android App B ──┼──► AuroraAppServer ──► MySQL aurora_app
+Android App C ──┘         │
+                          ├── /auth/wechat/login（会话）
+                          ├── /trial/device/activate（游客试用）
+                          └── /actuator/health
 ```
 
 ## 包职责
 
 | 包 | 职责 | 状态 |
 |----|------|------|
-| `common` | 统一响应 / 错误码 / 异常处理 | S1.1 |
-| `app` | 应用注册与 `AppContext` | S1.1 |
-| `security` | SecurityFilterChain + Bearer 过滤器 | S1.1 + **S2.1** |
-| `auth` | 用户 / 微信身份 / 会话 + **登录 API** | S1.2 + **S2.1** |
-| `trial` | 设备试用表 | S1.2（无计时业务） |
+| `common` | 响应 / 错误码 / Clock | S1.1 + S3.1 |
+| `app` | 应用注册 | S1.1 |
+| `security` | 安全过滤器 | S1.1～S3.1 |
+| `auth` | 微信登录与会话 | S2.1 |
+| `trial` | **72h 设备试用** | **S3.1** |
 | `membership` / `payment` | 预留 | 未实现 |
 
-## S2.1 边界
+## S3.1 边界
 
-已完成：
+已完成：activate 幂等登记、HMAC 哈希、UTC 72h 计算、进程内限流、并发安全。
 
-- 按 App 的微信配置注入（环境变量 / local yml）
-- `WechatAuthClient` 正式实现 + 测试 Mock
-- `POST /api/v1/auth/wechat/login`、`GET /me`、`POST /logout`
-- 不透明会话 Token（仅存哈希）、过期与撤销
-- 会话 `app_id` 与 `X-App-Code` 一致性校验
-- 并发首次登录防重复身份
-
-**未完成：** Refresh Token、试用计时、会员、支付、Android SDK、管理后台。
+**未完成：** Android 采集/离线计时、会员、支付、Redis、密钥轮换系统。
 
 ## 关键原则
 
-1. 显式传递 `AppContext` / `appId`。  
-2. `X-App-Code` 不是认证凭据；认证以会话为准。  
-3. AppSecret / code / 微信 access_token / 明文会话 Token 不写日志、不回传多余字段。  
-4. Schema 仅 Flyway；无假登录后门。  
+1. `X-App-Code` / `deviceKey` 不是强认证。  
+2. 原始 deviceKey / HMAC 密钥不入日志、不入库明文。  
+3. 试用时间只由服务端 Clock 决定。  
+4. 不宣称绝对防重装重置试用。  

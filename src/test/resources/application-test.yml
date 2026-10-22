@@ -33,3 +33,8 @@ aurora:
       speaker_cleaner:
         app-id: wx_test_speaker
         app-secret: test-secret-speaker
+  trial:
+    hmac-secret: test-trial-hmac-secret-do-not-use-in-prod
+    duration: 72h
+    rate-limit-per-window: 20
+    rate-limit-window: 1m

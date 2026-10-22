@@ -10,7 +10,10 @@
 
 除明确放行的接口外，`/api/v1/**` 需认证。
 
-S2.1 放行：`POST /api/v1/auth/wechat/login`（仍需合法 `X-App-Code` + 服务端微信配置）。
+匿名放行：
+
+- `POST /api/v1/auth/wechat/login`（需 `X-App-Code` + 微信配置）
+- `POST /api/v1/trial/device/activate`（需 `X-App-Code` + 试用 HMAC 配置；游客可访问）
 
 ## 统一响应
 
@@ -62,6 +65,7 @@ S2.1 放行：`POST /api/v1/auth/wechat/login`（仍需合法 `X-App-Code` + 服
 | 40004 | `VALIDATION_FAILED` | 参数校验失败 |
 | 40005 | `WECHAT_CODE_INVALID` | 微信 code 无效 |
 | 40006 | `WECHAT_AUTH_FAILED` | 微信认证失败 |
+| 40007 | `DEVICE_KEY_INVALID` | 设备标识非法 |
 | 40100 | `UNAUTHORIZED` | 未认证 |
 | 40101 | `SESSION_EXPIRED` | 会话过期 |
 | 40102 | `SESSION_REVOKED` | 会话已撤销 |
@@ -69,7 +73,11 @@ S2.1 放行：`POST /api/v1/auth/wechat/login`（仍需合法 `X-App-Code` + 服
 | 40301 | `APP_CONTEXT_MISMATCH` | Token 与 X-App-Code 不一致 |
 | 40400 | `NOT_FOUND` | 路由/资源不存在 |
 | 50000 | `INTERNAL_ERROR` | 内部错误（不返回堆栈） |
+| 42901 | `TRIAL_RATE_LIMITED` | 试用接口限流 |
 | 50001 | `WECHAT_CONFIG_MISSING` | 缺少微信配置 |
+| 50002 | `TRIAL_CONFIG_MISSING` | 缺少试用 HMAC 配置 |
+
+试用接口说明见 [device-trial.md](device-trial.md)。
 
 ## 应用标识与会话请求头
 

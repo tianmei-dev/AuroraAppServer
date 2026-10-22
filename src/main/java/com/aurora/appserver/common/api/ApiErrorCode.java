@@ -8,6 +8,7 @@ package com.aurora.appserver.common.api;
  * 40100+   — authentication (S2+)
  * 40300+   — authorization (S2+)
  * 40400+   — resource not found
+ * 42900+   — rate limiting
  * 50000+   — server errors
  */
 public enum ApiErrorCode {
@@ -21,6 +22,7 @@ public enum ApiErrorCode {
     VALIDATION_FAILED(40004, "Validation failed"),
     WECHAT_CODE_INVALID(40005, "WeChat authorization code is invalid"),
     WECHAT_AUTH_FAILED(40006, "WeChat authentication failed"),
+    DEVICE_KEY_INVALID(40007, "Device key is invalid"),
 
     UNAUTHORIZED(40100, "Unauthorized"),
     SESSION_EXPIRED(40101, "Session expired"),
@@ -31,8 +33,11 @@ public enum ApiErrorCode {
 
     NOT_FOUND(40400, "Resource not found"),
 
+    TRIAL_RATE_LIMITED(42901, "Too many trial requests"),
+
     INTERNAL_ERROR(50000, "Internal server error"),
-    WECHAT_CONFIG_MISSING(50001, "WeChat configuration is missing");
+    WECHAT_CONFIG_MISSING(50001, "WeChat configuration is missing"),
+    TRIAL_CONFIG_MISSING(50002, "Trial HMAC configuration is missing");
 
     private final int code;
     private final String defaultMessage;

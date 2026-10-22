@@ -55,7 +55,7 @@ logging:
     com.aurora.appserver: INFO
     org.springframework.security: WARN
 
-# WeChat AppSecret must come from env / local config — never commit real secrets.
+# Secrets must come from env / local config — never commit real secrets.
 aurora:
   auth:
     session-ttl: 7d
@@ -64,4 +64,9 @@ aurora:
       calculator_vault:
         app-id: ${WECHAT_APP_CALCULATOR_VAULT_APP_ID:}
         app-secret: ${WECHAT_APP_CALCULATOR_VAULT_APP_SECRET:}
+  trial:
+    hmac-secret: ${TRIAL_HMAC_SECRET:}
+    duration: 72h
+    rate-limit-per-window: 30
+    rate-limit-window: 1m
 

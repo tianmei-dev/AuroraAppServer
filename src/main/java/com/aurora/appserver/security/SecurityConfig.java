@@ -40,6 +40,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/wechat/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/trial/device/activate").permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex

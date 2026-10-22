@@ -10,6 +10,7 @@ public class AuroraAuthProperties {
 
     private final Auth auth = new Auth();
     private final Wechat wechat = new Wechat();
+    private final Trial trial = new Trial();
 
     public Auth getAuth() {
         return auth;
@@ -17,6 +18,10 @@ public class AuroraAuthProperties {
 
     public Wechat getWechat() {
         return wechat;
+    }
+
+    public Trial getTrial() {
+        return trial;
     }
 
     public static class Auth {
@@ -71,6 +76,52 @@ public class AuroraAuthProperties {
         public boolean isComplete() {
             return appId != null && !appId.isBlank()
                     && appSecret != null && !appSecret.isBlank();
+        }
+    }
+
+    public static class Trial {
+        /** HMAC-SHA256 secret for device_key_hash. Must come from env / local config. */
+        private String hmacSecret = "";
+        /** Fixed free-trial duration; product rule is 72 hours. */
+        private Duration duration = Duration.ofHours(72);
+        /** Anonymous activate requests allowed per client key per window. */
+        private int rateLimitPerWindow = 30;
+        private Duration rateLimitWindow = Duration.ofMinutes(1);
+
+        public String getHmacSecret() {
+            return hmacSecret;
+        }
+
+        public void setHmacSecret(String hmacSecret) {
+            this.hmacSecret = hmacSecret;
+        }
+
+        public Duration getDuration() {
+            return duration;
+        }
+
+        public void setDuration(Duration duration) {
+            this.duration = duration;
+        }
+
+        public int getRateLimitPerWindow() {
+            return rateLimitPerWindow;
+        }
+
+        public void setRateLimitPerWindow(int rateLimitPerWindow) {
+            this.rateLimitPerWindow = rateLimitPerWindow;
+        }
+
+        public Duration getRateLimitWindow() {
+            return rateLimitWindow;
+        }
+
+        public void setRateLimitWindow(Duration rateLimitWindow) {
+            this.rateLimitWindow = rateLimitWindow;
+        }
+
+        public boolean isHmacConfigured() {
+            return hmacSecret != null && !hmacSecret.isBlank();
         }
     }
 }
