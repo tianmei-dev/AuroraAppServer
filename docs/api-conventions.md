@@ -15,6 +15,10 @@
 - `POST /api/v1/auth/wechat/login`（需 `X-App-Code` + 微信配置）
 - `POST /api/v1/trial/device/activate`（需 `X-App-Code` + 试用 HMAC 配置；游客可访问）
 
+需登录：
+
+- `GET /api/v1/membership/me`（S4.1；会员状态；**无**公开 grant/revoke HTTP）
+
 ## 统一响应
 
 成功：
@@ -73,11 +77,16 @@
 | 40301 | `APP_CONTEXT_MISMATCH` | Token 与 X-App-Code 不一致 |
 | 40400 | `NOT_FOUND` | 路由/资源不存在 |
 | 50000 | `INTERNAL_ERROR` | 内部错误（不返回堆栈） |
+| 40008 | `MEMBERSHIP_PLAN_DISABLED` | 会员套餐已禁用 |
+| 40009 | `MEMBERSHIP_GRANT_SOURCE_INVALID` | 发放来源非法 |
+| 40302 | `MEMBERSHIP_TEST_SOURCE_FORBIDDEN` | 生产环境禁止 TEST 发放 |
+| 40401 | `MEMBERSHIP_PLAN_NOT_FOUND` | 套餐不存在 |
+| 40402 | `MEMBERSHIP_GRANT_NOT_FOUND` | 发放记录不存在 |
 | 42901 | `TRIAL_RATE_LIMITED` | 试用接口限流 |
 | 50001 | `WECHAT_CONFIG_MISSING` | 缺少微信配置 |
 | 50002 | `TRIAL_CONFIG_MISSING` | 缺少试用 HMAC 配置 |
 
-试用接口说明见 [device-trial.md](device-trial.md)。
+试用见 [device-trial.md](device-trial.md)；会员见 [membership.md](membership.md)。
 
 ## 应用标识与会话请求头
 

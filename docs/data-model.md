@@ -1,4 +1,4 @@
-# 数据模型（S1.1 / S1.2）
+# 数据模型（S1.1 / S1.2 / S3.1 / S4.1）
 
 ## 数据库
 
@@ -13,8 +13,11 @@
 apps
   ├── users (app_id)
   │     ├── wechat_identities (app_id, user_id)  -- 复合 FK → users(app_id, id)
-  │     └── auth_sessions     (app_id, user_id)  -- 复合 FK → users(app_id, id)
-  └── device_trials (app_id)
+  │     ├── auth_sessions     (app_id, user_id)  -- 复合 FK → users(app_id, id)
+  │     ├── membership_grants (app_id, user_id)  -- S4.1
+  │     └── membership_entitlements (app_id, user_id) -- S4.1
+  ├── device_trials (app_id)
+  └── membership_plans (app_id)                  -- S4.1
 ```
 
 ## 表：`apps`（S1.1）
@@ -101,15 +104,48 @@ apps
 
 约束：`UNIQUE (app_id, device_key_hash)`。
 
-S3.1 **未新增迁移**：复用 V3 表；无 V4。
+S3.1 **未新增迁移**：复用 V3 表。
+
+## 表：`membership_plans`（S4.1）
+
+| 列 | 类型 | 约束 | 说明 |
+|----|------|------|------|
+| `id` | BIGINT | PK | |
+| `app_id` | BIGINT | FK → apps | 套餐属 App |
+| `plan_code` | VARCHAR(32) | UNIQUE(app_id, plan_code) | MONTHLY / YEARLY / LIFETIME |
+| `display_name` | VARCHAR(128) | | |
+| `price_fen` | INT | ≥0 | 价格（分） |
+| `duration_days` | INT | 可空 | 限时天数；永久为 NULL |
+| `is_lifetime` | TINYINT(1) | | 与 duration 互斥校验 |
+| `status` | VARCHAR(32) | ACTIVE / DISABLED | |
+
+种子（calculator_vault）：月卡 590/30 天、年卡 1990/365 天、永久 2990。
+
+## 表：`membership_grants`（S4.1）
+
+发放账本；**不物理删除**，撤销写 `revoked_at`。
+
+| 列 | 说明 |
+|----|------|
+| `app_id` + `user_id` | 复合 FK → users |
+| `plan_id` / `plan_code` | 发放时快照 |
+| `source_type` + `source_ref` | 可信来源；`UNIQUE (app_id, source_type, source_ref)` 幂等 |
+| `order_id` | 可空，预留订单 |
+| `duration_days` / `is_lifetime` | 贡献时长快照 |
+| `granted_at` / `revoked_at` / `revoke_reason` | 审计 |
+
+## 表：`membership_entitlements`（S4.1）
+
+每用户一行：悲观锁 + 物化 `is_lifetime` / `started_at` / `expires_at`。  
+**权威计算仍以 grants 重放为准。**
 
 ## 迁移文件
 
 - `V1__create_apps_table.sql`
 - `V2__seed_calculator_vault.sql`
 - `V3__create_account_and_trial_tables.sql`
+- `V4__create_membership_tables.sql`
 
 ## 后续表（未实现）
 
-- `memberships.app_id`
 - `orders.app_id`

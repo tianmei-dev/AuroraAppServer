@@ -23,6 +23,8 @@ public enum ApiErrorCode {
     WECHAT_CODE_INVALID(40005, "WeChat authorization code is invalid"),
     WECHAT_AUTH_FAILED(40006, "WeChat authentication failed"),
     DEVICE_KEY_INVALID(40007, "Device key is invalid"),
+    MEMBERSHIP_PLAN_DISABLED(40008, "Membership plan is disabled"),
+    MEMBERSHIP_GRANT_SOURCE_INVALID(40009, "Membership grant source is invalid"),
 
     UNAUTHORIZED(40100, "Unauthorized"),
     SESSION_EXPIRED(40101, "Session expired"),
@@ -30,8 +32,11 @@ public enum ApiErrorCode {
 
     FORBIDDEN(40300, "Forbidden"),
     APP_CONTEXT_MISMATCH(40301, "Application context mismatch"),
+    MEMBERSHIP_TEST_SOURCE_FORBIDDEN(40302, "TEST membership grants are not allowed in this environment"),
 
     NOT_FOUND(40400, "Resource not found"),
+    MEMBERSHIP_PLAN_NOT_FOUND(40401, "Membership plan not found"),
+    MEMBERSHIP_GRANT_NOT_FOUND(40402, "Membership grant not found"),
 
     TRIAL_RATE_LIMITED(42901, "Too many trial requests"),
 

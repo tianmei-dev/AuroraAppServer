@@ -52,6 +52,9 @@ Repository 业务查询一律带 `appId`，例如：
 - `WechatIdentityRepository.findByAppIdAndWechatAppidAndOpenid`
 - `AuthSessionRepository.findByAppIdAndTokenHash`
 - `DeviceTrialRepository.findByAppIdAndDeviceKeyHash`
+- `MembershipPlanRepository.findByAppIdAndPlanCode`
+- `MembershipGrantRepository.findByAppIdAndUserId…` / `findByAppIdAndSourceTypeAndSourceRef`
+- `MembershipEntitlementRepository.findForUpdate(appId, userId)`
 
 ## 用户、会话、试用如何隔离
 
