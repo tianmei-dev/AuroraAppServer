@@ -1,11 +1,13 @@
 package com.aurora.appserver.security;
 
+import com.aurora.appserver.auth.security.BearerTokenAuthenticationFilter;
 import com.aurora.appserver.common.api.ApiErrorCode;
 import com.aurora.appserver.common.api.ApiResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -13,15 +15,18 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
     private final ObjectMapper objectMapper;
+    private final BearerTokenAuthenticationFilter bearerTokenAuthenticationFilter;
 
-    public SecurityConfig(ObjectMapper objectMapper) {
+    public SecurityConfig(ObjectMapper objectMapper, BearerTokenAuthenticationFilter bearerTokenAuthenticationFilter) {
         this.objectMapper = objectMapper;
+        this.bearerTokenAuthenticationFilter = bearerTokenAuthenticationFilter;
     }
 
     @Bean
@@ -34,6 +39,7 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/wechat/login").permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex
@@ -42,7 +48,8 @@ public class SecurityConfig {
                         .accessDeniedHandler((request, response, accessDeniedException) ->
                                 writeJson(response, HttpServletResponse.SC_FORBIDDEN, ApiErrorCode.FORBIDDEN))
                 )
-                .cors(Customizer.withDefaults());
+                .cors(Customizer.withDefaults())
+                .addFilterBefore(bearerTokenAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

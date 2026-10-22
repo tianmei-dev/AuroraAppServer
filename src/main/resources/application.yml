@@ -54,3 +54,14 @@ logging:
     root: INFO
     com.aurora.appserver: INFO
     org.springframework.security: WARN
+
+# WeChat AppSecret must come from env / local config — never commit real secrets.
+aurora:
+  auth:
+    session-ttl: 7d
+  wechat:
+    apps:
+      calculator_vault:
+        app-id: ${WECHAT_APP_CALCULATOR_VAULT_APP_ID:}
+        app-secret: ${WECHAT_APP_CALCULATOR_VAULT_APP_SECRET:}
+

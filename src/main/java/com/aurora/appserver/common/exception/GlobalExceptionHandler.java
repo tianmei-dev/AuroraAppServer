@@ -69,10 +69,11 @@ public class GlobalExceptionHandler {
     private static HttpStatus mapHttpStatus(ApiErrorCode errorCode) {
         return switch (errorCode) {
             case APP_NOT_FOUND, NOT_FOUND -> HttpStatus.NOT_FOUND;
-            case APP_DISABLED, FORBIDDEN -> HttpStatus.FORBIDDEN;
-            case APP_CONTEXT_REQUIRED, BAD_REQUEST, VALIDATION_FAILED -> HttpStatus.BAD_REQUEST;
-            case UNAUTHORIZED -> HttpStatus.UNAUTHORIZED;
-            case INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
+            case APP_DISABLED, FORBIDDEN, APP_CONTEXT_MISMATCH -> HttpStatus.FORBIDDEN;
+            case APP_CONTEXT_REQUIRED, BAD_REQUEST, VALIDATION_FAILED,
+                    WECHAT_CODE_INVALID, WECHAT_AUTH_FAILED -> HttpStatus.BAD_REQUEST;
+            case UNAUTHORIZED, SESSION_EXPIRED, SESSION_REVOKED -> HttpStatus.UNAUTHORIZED;
+            case WECHAT_CONFIG_MISSING, INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
             case SUCCESS -> HttpStatus.OK;
         };
     }

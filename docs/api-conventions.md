@@ -8,7 +8,9 @@
 /api/v1
 ```
 
-S1.1 默认 **不开放** 任何业务接口；`/api/v1/**` 需认证。
+除明确放行的接口外，`/api/v1/**` 需认证。
+
+S2.1 放行：`POST /api/v1/auth/wechat/login`（仍需合法 `X-App-Code` + 服务端微信配置）。
 
 ## 统一响应
 
@@ -49,7 +51,7 @@ S1.1 默认 **不开放** 任何业务接口；`/api/v1/**` 需认证。
 | `40400+` | 资源不存在 |
 | `50000+` | 服务端错误 |
 
-S1.1 已定义：
+已定义（含 S2.1）：
 
 | code | 常量 | 含义 |
 |------|------|------|
@@ -58,22 +60,30 @@ S1.1 已定义：
 | 40002 | `APP_DISABLED` | 应用已停用 |
 | 40003 | `APP_CONTEXT_REQUIRED` | 缺少应用上下文 |
 | 40004 | `VALIDATION_FAILED` | 参数校验失败 |
+| 40005 | `WECHAT_CODE_INVALID` | 微信 code 无效 |
+| 40006 | `WECHAT_AUTH_FAILED` | 微信认证失败 |
 | 40100 | `UNAUTHORIZED` | 未认证 |
+| 40101 | `SESSION_EXPIRED` | 会话过期 |
+| 40102 | `SESSION_REVOKED` | 会话已撤销 |
 | 40300 | `FORBIDDEN` | 无权限 |
+| 40301 | `APP_CONTEXT_MISMATCH` | Token 与 X-App-Code 不一致 |
 | 40400 | `NOT_FOUND` | 路由/资源不存在 |
 | 50000 | `INTERNAL_ERROR` | 内部错误（不返回堆栈） |
+| 50001 | `WECHAT_CONFIG_MISSING` | 缺少微信配置 |
 
-## 应用标识请求头（预留）
+## 应用标识与会话请求头
 
 ```http
 X-App-Code: calculator_vault
+Authorization: Bearer {accessToken}
 ```
 
 注意：
 
-- 仅用于路由与配置查找。
-- **不能**证明请求真实来自该 Android App。
-- 服务端不得直接信任客户端传入的数字 `app_id`。
+- `X-App-Code` 仅用于路由与配置查找，**不是**认证凭据。
+- 受保护接口必须同时校验 Bearer 会话中的 `app_id` 与 `X-App-Code` 解析结果一致。
+- 服务端不得直接信任客户端传入的数字 `app_id` / `userId`。
+- 详情见 [wechat-login.md](wechat-login.md)。
 
 ## 健康检查
 

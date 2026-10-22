@@ -21,3 +21,15 @@ management:
   endpoint:
     health:
       show-details: never
+
+aurora:
+  auth:
+    session-ttl: 2h
+  wechat:
+    apps:
+      calculator_vault:
+        app-id: wx_test_calculator
+        app-secret: test-secret-calculator
+      speaker_cleaner:
+        app-id: wx_test_speaker
+        app-secret: test-secret-speaker

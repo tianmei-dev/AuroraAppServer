@@ -79,4 +79,16 @@ public class AuthSessionEntity {
     public Instant getCreatedAt() {
         return createdAt;
     }
+
+    public boolean isRevoked() {
+        return revokedAt != null;
+    }
+
+    public boolean isExpired(Instant now) {
+        return expiresAt != null && !expiresAt.isAfter(now);
+    }
+
+    public void revoke(Instant at) {
+        this.revokedAt = at;
+    }
 }

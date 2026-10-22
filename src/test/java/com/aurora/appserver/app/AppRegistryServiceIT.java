@@ -49,14 +49,15 @@ class AppRegistryServiceIT {
     @Test
     @Transactional
     void disabledAppCannotBeTreatedAsAvailable() {
+        String appCode = "disabled_app_" + System.nanoTime();
         jdbcTemplate.update(
                 "INSERT INTO apps (app_code, app_name, platform, package_name, status) VALUES (?, ?, ?, ?, ?)",
-                "speaker_cleaner", "Speaker Cleaner", "ANDROID", "com.aurora.speakercleaner", "DISABLED");
+                appCode, "Disabled App", "ANDROID", "com.aurora.disabled." + System.nanoTime(), "DISABLED");
 
-        assertThat(appRegistryService.exists("speaker_cleaner")).isTrue();
-        assertThat(appRegistryService.isActive("speaker_cleaner")).isFalse();
+        assertThat(appRegistryService.exists(appCode)).isTrue();
+        assertThat(appRegistryService.isActive(appCode)).isFalse();
 
-        assertThatThrownBy(() -> appRegistryService.requireActiveApp("speaker_cleaner"))
+        assertThatThrownBy(() -> appRegistryService.requireActiveApp(appCode))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                         .isEqualTo(ApiErrorCode.APP_DISABLED));

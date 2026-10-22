@@ -1,4 +1,4 @@
-# 架构总览（S1.1 / S1.2）
+# 架构总览（S1.1 / S1.2 / S2.1）
 
 ## 目标
 
@@ -18,50 +18,38 @@
 ```
 Android App A ──┐
 Android App B ──┼──► AuroraAppServer (单体) ──► MySQL aurora_app
-Android App C ──┘         │
-                          └── Actuator /health
+Android App C ──┘         │                      ▲
+                          └── Actuator /health    │
+                                                  WeChat OAuth (服务端换 code)
 ```
-
-- 不使用微服务、Kubernetes、复杂多租户框架。
-- 暂不引入 Redis。
 
 ## 包职责
 
 | 包 | 职责 | 状态 |
 |----|------|------|
-| `common` | `ApiResponse` / `ApiErrorCode` / `GlobalExceptionHandler` | S1.1 已实现 |
-| `app` | `apps` 注册表、`AppRegistryService`、`AppContext` | S1.1 已实现 |
-| `security` | 默认拒绝、健康检查匿名 | S1.1 已实现 |
-| `auth` | `users` / `wechat_identities` / `auth_sessions` 实体与 Repository | **S1.2 数据模型**（无登录 API） |
-| `trial` | `device_trials` 实体与 Repository | **S1.2 数据模型**（无试用计时） |
-| `membership` | 会员 | 预留 |
-| `payment` | 第三方聚合支付 | 预留 |
+| `common` | 统一响应 / 错误码 / 异常处理 | S1.1 |
+| `app` | 应用注册与 `AppContext` | S1.1 |
+| `security` | SecurityFilterChain + Bearer 过滤器 | S1.1 + **S2.1** |
+| `auth` | 用户 / 微信身份 / 会话 + **登录 API** | S1.2 + **S2.1** |
+| `trial` | 设备试用表 | S1.2（无计时业务） |
+| `membership` / `payment` | 预留 | 未实现 |
 
-## S1.2 边界
+## S2.1 边界
 
-已完成：表结构、JPA 映射、按 `app_id` 查询的 Repository、约束与隔离测试。
+已完成：
 
-**未完成（留给 S2.1+）：**
+- 按 App 的微信配置注入（环境变量 / local yml）
+- `WechatAuthClient` 正式实现 + 测试 Mock
+- `POST /api/v1/auth/wechat/login`、`GET /me`、`POST /logout`
+- 不透明会话 Token（仅存哈希）、过期与撤销
+- 会话 `app_id` 与 `X-App-Code` 一致性校验
+- 并发首次登录防重复身份
 
-- 微信 OAuth / Token 签发与刷新
-- 设备标识采集与 72 小时试用计算
-- 任何业务 HTTP API
+**未完成：** Refresh Token、试用计时、会员、支付、Android SDK、管理后台。
 
 ## 关键原则
 
-1. **显式传递 `AppContext` / `appId`**，优先于 ThreadLocal。  
-2. 客户端 `X-App-Code` / 包名不是安全凭证。  
-3. 受保护业务必须以服务端会话中绑定的 `app_id` 为准（S2.1）。  
-4. Schema 变更只通过 Flyway；JPA `ddl-auto=validate`。  
-5. 用户—身份 / 用户—会话 通过复合外键 `(app_id, user_id)` 防跨 App 串数据。
-
-## 配置分层
-
-| 文件 | 用途 |
-|------|------|
-| `application.yml` | 公共默认配置（无真实密码） |
-| `application-local.yml` | 本地凭据（gitignore） |
-| `application-local.yml.example` | 安全示例（开发库端口 3308） |
-| `application-test.yml` | 测试配置（`docker-compose.test.yml` 端口 3307） |
-| `docker-compose.dev.yml` | 本地开发 MySQL |
-| `docker-compose.test.yml` | 集成测试 MySQL |
+1. 显式传递 `AppContext` / `appId`。  
+2. `X-App-Code` 不是认证凭据；认证以会话为准。  
+3. AppSecret / code / 微信 access_token / 明文会话 Token 不写日志、不回传多余字段。  
+4. Schema 仅 Flyway；无假登录后门。  

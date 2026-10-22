@@ -1,13 +1,26 @@
 # Copy this file to application-local.yml (gitignored) and fill in local credentials.
 # Aligns with docker-compose.dev.yml (MySQL on host port 3308, database aurora_app).
 # Password must match MYSQL_PASSWORD in project-root .env.
-# Never commit real passwords.
+# Never commit real passwords or WeChat AppSecret.
 
 spring:
   datasource:
     url: jdbc:mysql://127.0.0.1:3308/aurora_app?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&connectionTimeZone=UTC&allowPublicKeyRetrieval=true&useSSL=false
     username: aurora
     password: change-me
+
+aurora:
+  auth:
+    session-ttl: 7d
+  wechat:
+    apps:
+      calculator_vault:
+        app-id: ${WECHAT_APP_CALCULATOR_VAULT_APP_ID:wx-your-appid}
+        app-secret: ${WECHAT_APP_CALCULATOR_VAULT_APP_SECRET:change-me-wechat-secret}
+      # Future second app example:
+      # speaker_cleaner:
+      #   app-id: ${WECHAT_APP_SPEAKER_CLEANER_APP_ID:}
+      #   app-secret: ${WECHAT_APP_SPEAKER_CLEANER_APP_SECRET:}
 
 logging:
   level:

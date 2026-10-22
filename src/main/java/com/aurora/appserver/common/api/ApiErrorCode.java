@@ -19,12 +19,20 @@ public enum ApiErrorCode {
     APP_DISABLED(40002, "Application is disabled"),
     APP_CONTEXT_REQUIRED(40003, "Application context is required"),
     VALIDATION_FAILED(40004, "Validation failed"),
+    WECHAT_CODE_INVALID(40005, "WeChat authorization code is invalid"),
+    WECHAT_AUTH_FAILED(40006, "WeChat authentication failed"),
 
     UNAUTHORIZED(40100, "Unauthorized"),
+    SESSION_EXPIRED(40101, "Session expired"),
+    SESSION_REVOKED(40102, "Session revoked"),
+
     FORBIDDEN(40300, "Forbidden"),
+    APP_CONTEXT_MISMATCH(40301, "Application context mismatch"),
+
     NOT_FOUND(40400, "Resource not found"),
 
-    INTERNAL_ERROR(50000, "Internal server error");
+    INTERNAL_ERROR(50000, "Internal server error"),
+    WECHAT_CONFIG_MISSING(50001, "WeChat configuration is missing");
 
     private final int code;
     private final String defaultMessage;
