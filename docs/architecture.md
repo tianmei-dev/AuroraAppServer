@@ -29,7 +29,7 @@ Android App C ──┘         │
 | `app` | 应用注册 | S1.1 |
 | `security` | 安全过滤器 | S1.1～S4.1 |
 | `auth` | 微信登录与会话 | S2.1 |
-| `trial` | 72h 设备试用 | S3.1 |
+| `trial` | 72h 设备试用（S3.2：remainingSecondsCap 只可缩短） | S3.1 / S3.2 |
 | `membership` | **会员套餐 / 发放账本 / 状态查询** | **S4.1** |
 | `payment` | 订单与支付 | 未实现 |
 

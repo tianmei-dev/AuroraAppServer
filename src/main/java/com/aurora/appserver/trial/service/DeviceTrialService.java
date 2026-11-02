@@ -19,12 +19,18 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+/**
+ * Device 72h trial. S3.2: optional {@code remainingSecondsCap} may only keep or shorten
+ * {@code trial_expires_at}; never extend. Success responses always reflect persisted state.
+ */
 @Service
 public class DeviceTrialService {
 
     private static final Logger log = LoggerFactory.getLogger(DeviceTrialService.class);
     private static final int DEVICE_KEY_MIN = 8;
     private static final int DEVICE_KEY_MAX = 128;
+    private static final long CAP_MIN = 0L;
+    private static final long CAP_MAX = 259_200L; // 72h
     private static final Pattern DEVICE_KEY_PATTERN = Pattern.compile("^[A-Za-z0-9._\\-:]+$");
 
     private final AppRegistryService appRegistryService;
@@ -62,44 +68,74 @@ public class DeviceTrialService {
     ) {
     }
 
-    public TrialView activate(String appCodeHeader, String deviceKey, String clientIp) {
+    public TrialView activate(String appCodeHeader, String deviceKey, Long remainingSecondsCap, String clientIp) {
         AppContext app = appRegistryService.requireActiveApp(appCodeHeader);
         requireHmacConfigured();
         String normalizedKey = validateDeviceKey(deviceKey);
+        Long cap = normalizeCap(remainingSecondsCap);
 
         String rateKey = "trial:" + app.appCode() + ":" + (StringUtils.hasText(clientIp) ? clientIp : "unknown");
         rateLimiter.checkOrThrow(rateKey);
 
         String deviceKeyHash = deviceKeyHasher.hash(app.appCode(), normalizedKey);
-        DeviceTrialEntity trial = resolveTrial(app.appId(), deviceKeyHash);
+        DeviceTrialEntity trial = resolveTrial(app.appId(), deviceKeyHash, cap);
         return toView(trial);
     }
 
-    DeviceTrialEntity resolveTrial(Long appId, String deviceKeyHash) {
-        return deviceTrialRepository.findByAppIdAndDeviceKeyHash(appId, deviceKeyHash)
-                .orElseGet(() -> createHandlingRace(appId, deviceKeyHash));
-    }
-
-    private DeviceTrialEntity createHandlingRace(Long appId, String deviceKeyHash) {
-        try {
-            return self.createInNewTx(appId, deviceKeyHash);
-        } catch (DataAccessException ex) {
-            log.info("Concurrent device trial create detected; recovering existing record");
-            return deviceTrialRepository.findByAppIdAndDeviceKeyHash(appId, deviceKeyHash)
-                    .orElseThrow(() -> new BusinessException(ApiErrorCode.INTERNAL_ERROR));
+    /**
+     * Ensure a row exists (create race-safe), then always re-read — and if a cap is present,
+     * atomically LEAST-tighten. Losing concurrent inserts must still apply their stricter cap.
+     */
+    DeviceTrialEntity resolveTrial(Long appId, String deviceKeyHash, Long remainingSecondsCap) {
+        if (deviceTrialRepository.findByAppIdAndDeviceKeyHash(appId, deviceKeyHash).isEmpty()) {
+            try {
+                self.createInNewTx(appId, deviceKeyHash, remainingSecondsCap);
+            } catch (DataAccessException ex) {
+                log.info("Concurrent device trial create detected; will apply cap on existing row if present");
+            }
         }
+        return applyCapIfPresent(appId, deviceKeyHash, remainingSecondsCap);
     }
 
+    /**
+     * First activation: final expires (including optional cap) is written in the same transaction.
+     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public DeviceTrialEntity createInNewTx(Long appId, String deviceKeyHash) {
+    public DeviceTrialEntity createInNewTx(Long appId, String deviceKeyHash, Long remainingSecondsCap) {
         return deviceTrialRepository.findByAppIdAndDeviceKeyHash(appId, deviceKeyHash)
                 .orElseGet(() -> {
                     Instant now = clock.instant();
-                    Duration duration = properties.getTrial().getDuration();
-                    Instant expires = now.plus(duration);
+                    Instant expires = computeFirstExpires(now, remainingSecondsCap);
                     return deviceTrialRepository.saveAndFlush(
                             DeviceTrialEntity.create(appId, deviceKeyHash, now, now, expires));
                 });
+    }
+
+    private DeviceTrialEntity applyCapIfPresent(Long appId, String deviceKeyHash, Long remainingSecondsCap) {
+        if (remainingSecondsCap != null) {
+            Instant candidate = clock.instant().plusSeconds(remainingSecondsCap);
+            self.tightenInNewTx(appId, deviceKeyHash, candidate);
+        }
+        return deviceTrialRepository.findByAppIdAndDeviceKeyHash(appId, deviceKeyHash)
+                .orElseThrow(() -> new BusinessException(ApiErrorCode.INTERNAL_ERROR));
+    }
+
+    /**
+     * Atomic LEAST update — concurrent / out-of-order caps cannot extend the stored expiry.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void tightenInNewTx(Long appId, String deviceKeyHash, Instant candidateExpiresAt) {
+        // MySQL may report 0 "changed" rows when LEAST leaves the value unchanged; do not treat as failure.
+        deviceTrialRepository.tightenExpiresAtIfEarlier(appId, deviceKeyHash, candidateExpiresAt);
+    }
+
+    Instant computeFirstExpires(Instant now, Long remainingSecondsCap) {
+        Instant full = now.plus(properties.getTrial().getDuration());
+        if (remainingSecondsCap == null) {
+            return full;
+        }
+        Instant capped = now.plusSeconds(remainingSecondsCap);
+        return capped.isBefore(full) ? capped : full;
     }
 
     private TrialView toView(DeviceTrialEntity trial) {
@@ -121,6 +157,16 @@ public class DeviceTrialService {
         if (!properties.getTrial().isHmacConfigured()) {
             throw new BusinessException(ApiErrorCode.TRIAL_CONFIG_MISSING);
         }
+    }
+
+    static Long normalizeCap(Long remainingSecondsCap) {
+        if (remainingSecondsCap == null) {
+            return null;
+        }
+        if (remainingSecondsCap < CAP_MIN || remainingSecondsCap > CAP_MAX) {
+            throw new BusinessException(ApiErrorCode.TRIAL_CAP_INVALID);
+        }
+        return remainingSecondsCap;
     }
 
     static String validateDeviceKey(String deviceKey) {

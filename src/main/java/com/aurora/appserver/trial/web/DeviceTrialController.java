@@ -32,6 +32,7 @@ public class DeviceTrialController {
         DeviceTrialService.TrialView view = deviceTrialService.activate(
                 appCode,
                 request.deviceKey(),
+                request.remainingSecondsCap(),
                 clientIp(httpRequest)
         );
         return ApiResponse.success(new DeviceTrialResponse(

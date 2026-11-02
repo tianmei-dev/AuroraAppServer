@@ -25,6 +25,7 @@ public enum ApiErrorCode {
     DEVICE_KEY_INVALID(40007, "Device key is invalid"),
     MEMBERSHIP_PLAN_DISABLED(40008, "Membership plan is disabled"),
     MEMBERSHIP_GRANT_SOURCE_INVALID(40009, "Membership grant source is invalid"),
+    TRIAL_CAP_INVALID(40010, "Trial remainingSecondsCap is invalid"),
 
     UNAUTHORIZED(40100, "Unauthorized"),
     SESSION_EXPIRED(40101, "Session expired"),
