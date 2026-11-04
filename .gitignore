@@ -37,3 +37,7 @@ logs/
 *.pid
 *.seed
 *.pid.lock
+
+# I3.4.3-D1 isolation fixture secrets (never commit)
+build/i343d1-sessions.local.json
+**/i343d1-sessions.local.json
