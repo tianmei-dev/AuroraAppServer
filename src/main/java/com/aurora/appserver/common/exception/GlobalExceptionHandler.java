@@ -68,8 +68,9 @@ public class GlobalExceptionHandler {
 
     private static HttpStatus mapHttpStatus(ApiErrorCode errorCode) {
         return switch (errorCode) {
-            case APP_NOT_FOUND, NOT_FOUND, MEMBERSHIP_PLAN_NOT_FOUND, MEMBERSHIP_GRANT_NOT_FOUND ->
-                    HttpStatus.NOT_FOUND;
+            case APP_NOT_FOUND, NOT_FOUND, MEMBERSHIP_PLAN_NOT_FOUND, MEMBERSHIP_GRANT_NOT_FOUND,
+                    PAYMENT_ORDER_NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case PAYMENT_CLIENT_REQUEST_CONFLICT, PAYMENT_LIFETIME_ALREADY_ACTIVE -> HttpStatus.CONFLICT;
             case APP_DISABLED, FORBIDDEN, APP_CONTEXT_MISMATCH, MEMBERSHIP_TEST_SOURCE_FORBIDDEN ->
                     HttpStatus.FORBIDDEN;
             case APP_CONTEXT_REQUIRED, BAD_REQUEST, VALIDATION_FAILED,
@@ -78,7 +79,8 @@ public class GlobalExceptionHandler {
                     TRIAL_CAP_INVALID -> HttpStatus.BAD_REQUEST;
             case UNAUTHORIZED, SESSION_EXPIRED, SESSION_REVOKED -> HttpStatus.UNAUTHORIZED;
             case TRIAL_RATE_LIMITED -> HttpStatus.TOO_MANY_REQUESTS;
-            case WECHAT_CONFIG_MISSING, TRIAL_CONFIG_MISSING, INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
+            case WECHAT_CONFIG_MISSING, TRIAL_CONFIG_MISSING, PAYMENT_CONFIG_MISSING, INTERNAL_ERROR ->
+                    HttpStatus.INTERNAL_SERVER_ERROR;
             case SUCCESS -> HttpStatus.OK;
         };
     }

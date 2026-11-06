@@ -38,3 +38,10 @@ aurora:
     duration: 72h
     rate-limit-per-window: 20
     rate-limit-window: 1m
+  payment:
+    # FakePaymentProvider lives in src/test only; never configure real Yusen credentials here.
+    provider: FAKE
+    environment: TEST
+    order-ttl: 30m
+    reuse-min-remaining: 5m
+    order-no-prefix: CV

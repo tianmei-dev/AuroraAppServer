@@ -69,4 +69,17 @@ aurora:
     duration: 72h
     rate-limit-per-window: 30
     rate-limit-window: 1m
+  payment:
+    # NONE disables order creation. PRODUCTION allows only YUSEN with https endpoints.
+    provider: ${PAYMENT_PROVIDER:NONE}
+    environment: ${PAYMENT_ENVIRONMENT:PRODUCTION}
+    order-ttl: 30m
+    reuse-min-remaining: 5m
+    order-no-prefix: CV
+    yusen:
+      gateway-base-url: ${YUSEN_GATEWAY_BASE_URL:}
+      pid: ${YUSEN_PID:}
+      key: ${YUSEN_KEY:}
+      notify-url: ${YUSEN_NOTIFY_URL:}
+      return-url: ${YUSEN_RETURN_URL:}
 

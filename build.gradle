@@ -38,3 +38,44 @@ tasks.withType(JavaCompile).configureEach {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+// Isolation fixtures (e.g. I3.4.3-D1) live outside src/main so they never ship in bootJar.
+sourceSets {
+    fixture {
+        java.srcDir 'src/fixture/java'
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += output + sourceSets.main.output + sourceSets.main.runtimeClasspath
+    }
+}
+
+tasks.register('i343d1Fixture', JavaExec) {
+    group = 'fixtures'
+    description = 'I3.4.3-D1 fixture: -Pi343d1Command=seed|clean (s32it + aurora_app_test only).'
+    classpath = sourceSets.fixture.runtimeClasspath
+    mainClass = 'com.aurora.appserver.AuroraAppServerApplication'
+    workingDir = projectDir
+    def command = project.findProperty('i343d1Command') ?: ''
+    args '--spring.profiles.active=s32it', '--server.port=0', "--i343d1.command=${command}"
+}
+
+tasks.register('verifyBootJarExcludesFixtures') {
+    group = 'verification'
+    description = 'Fails if test fixtures or fake payment providers are packaged in the production jar.'
+    dependsOn tasks.named('bootJar')
+    doLast {
+        def jarFile = tasks.named('bootJar').get().archiveFile.get().asFile
+        def offenders = new java.util.zip.ZipFile(jarFile).withCloseable { zip ->
+            zip.entries().collect { it.name }.findAll {
+                it.contains('com/aurora/appserver/fixture/') || it.contains('FakePaymentProvider')
+            }
+        }
+        if (!offenders.isEmpty()) {
+            throw new GradleException("Production jar contains fixtures: ${offenders}")
+        }
+        logger.lifecycle("bootJar fixture check OK: ${jarFile.name}")
+    }
+}
+
+tasks.named('check') {
+    dependsOn 'verifyBootJarExcludesFixtures'
+}

@@ -26,6 +26,8 @@ public enum ApiErrorCode {
     MEMBERSHIP_PLAN_DISABLED(40008, "Membership plan is disabled"),
     MEMBERSHIP_GRANT_SOURCE_INVALID(40009, "Membership grant source is invalid"),
     TRIAL_CAP_INVALID(40010, "Trial remainingSecondsCap is invalid"),
+    PAYMENT_CLIENT_REQUEST_CONFLICT(40011, "clientRequestId was already used for a different plan"),
+    PAYMENT_LIFETIME_ALREADY_ACTIVE(40012, "Lifetime membership is already active"),
 
     UNAUTHORIZED(40100, "Unauthorized"),
     SESSION_EXPIRED(40101, "Session expired"),
@@ -38,12 +40,14 @@ public enum ApiErrorCode {
     NOT_FOUND(40400, "Resource not found"),
     MEMBERSHIP_PLAN_NOT_FOUND(40401, "Membership plan not found"),
     MEMBERSHIP_GRANT_NOT_FOUND(40402, "Membership grant not found"),
+    PAYMENT_ORDER_NOT_FOUND(40403, "Payment order not found"),
 
     TRIAL_RATE_LIMITED(42901, "Too many trial requests"),
 
     INTERNAL_ERROR(50000, "Internal server error"),
     WECHAT_CONFIG_MISSING(50001, "WeChat configuration is missing"),
-    TRIAL_CONFIG_MISSING(50002, "Trial HMAC configuration is missing");
+    TRIAL_CONFIG_MISSING(50002, "Trial HMAC configuration is missing"),
+    PAYMENT_CONFIG_MISSING(50003, "Payment configuration is missing");
 
     private final int code;
     private final String defaultMessage;

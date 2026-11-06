@@ -19,6 +19,6 @@ if "%~1"=="" (
 
 set "CMD=%~1"
 echo Running I3.4.3-D1 fixture command=%CMD% (profile=s32it, server.port=0)
-REM Use server.port=0 so the fixture JVM does not collide with standing :8081.
-call "%~dp0..\gradlew.bat" bootRun --args="--spring.profiles.active=s32it --server.port=0 --i343d1.command=%CMD%"
+REM Fixture classes live in src/fixture (not in bootJar); server.port=0 avoids the standing :8081.
+call "%~dp0..\gradlew.bat" i343d1Fixture -Pi343d1Command=%CMD%
 exit /b %ERRORLEVEL%
