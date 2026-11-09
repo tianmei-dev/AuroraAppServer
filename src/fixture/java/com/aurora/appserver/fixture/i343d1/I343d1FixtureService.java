@@ -29,12 +29,16 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Profile("s32it")
 public class I343d1FixtureService {
+
+    private static final java.time.Duration MAX_SESSION_TTL = java.time.Duration.ofHours(72);
 
     private static final Logger log = LoggerFactory.getLogger(I343d1FixtureService.class);
 
@@ -136,11 +140,127 @@ public class I343d1FixtureService {
         AccountSeed other = createAccount(otherAppId, otherWechatAppId, "other-app-none");
         seeds.put("other-app-none", other);
 
+        for (String label : I343d1Constants.PAYMENT_LABELS) {
+            seeds.put(label, createAccount(vaultAppId, wechatAppId, label));
+        }
+
         String expiredSessionToken = issueExpiredSession(vaultAppId, monthly.userId());
         String revokedSessionToken = issueThenRevokeSession(monthly);
 
         writeOutputs(seeds, expiredSessionToken, revokedSessionToken, monthly.userId());
         logSeedSummary(seeds);
+    }
+
+    /**
+     * Re-issues sessions for the existing synthetic accounts without deleting or recreating any
+     * user, membership or order. Missing payment accounts (pay-*) are created without membership.
+     */
+    public void refreshSessions(java.time.Duration ttl) throws Exception {
+        safetyGate.assertSafeToRun();
+        if (ttl == null || ttl.isNegative() || ttl.isZero() || ttl.compareTo(MAX_SESSION_TTL) > 0) {
+            throw new IllegalArgumentException("i343d1.session-ttl must be between 1s and 72h");
+        }
+        Long vaultAppId = appRegistryService.requireActiveApp(I343d1Constants.APP_CODE).appId();
+        Long otherAppId = appRegistryService.requireActiveApp(I343d1Constants.OTHER_APP_CODE).appId();
+        String wechatAppId = requireWechatAppId(I343d1Constants.APP_CODE);
+        String otherWechatAppId = "wx_i343d1_other";
+
+        Map<String, AccountSeed> seeds = new LinkedHashMap<>();
+        for (String label : I343d1Constants.ACCOUNT_LABELS) {
+            boolean other = "other-app-none".equals(label);
+            Long appId = other ? otherAppId : vaultAppId;
+            String wx = other ? otherWechatAppId : wechatAppId;
+            var identity = wechatIdentityRepository.findByAppIdAndWechatAppidAndOpenid(
+                    appId, wx, I343d1Constants.openid(label));
+            if (identity.isEmpty()) {
+                log.warn("D1 account missing label={} (run seed to recreate the full D1 dataset)", label);
+                continue;
+            }
+            seeds.put(label, issueSession(label, appId, identity.get().getUserId(), ttl));
+        }
+        for (String label : I343d1Constants.PAYMENT_LABELS) {
+            var identity = wechatIdentityRepository.findByAppIdAndWechatAppidAndOpenid(
+                    vaultAppId, wechatAppId, I343d1Constants.openid(label));
+            Long userId = identity.map(WechatIdentityEntity::getUserId)
+                    .orElseGet(() -> createAccount(vaultAppId, wechatAppId, label).userId());
+            seeds.put(label, issueSession(label, vaultAppId, userId, ttl));
+        }
+
+        AccountSeed monthly = seeds.get("monthly");
+        if (monthly == null) {
+            throw new IllegalStateException("D1 monthly account missing; run seed first");
+        }
+        String expiredSessionToken = issueExpiredSession(vaultAppId, monthly.userId());
+        String revokedSessionToken = issueThenRevokeSession(monthly);
+
+        writeOutputs(seeds, expiredSessionToken, revokedSessionToken, monthly.userId());
+        logSeedSummary(seeds);
+    }
+
+    /**
+     * Creates a batch of brand-new payment test accounts (no membership) and issues sessions.
+     * Never deletes or modifies existing users, memberships or orders; use this instead of
+     * resetting the D1 dataset when payment tests need clean accounts.
+     */
+    public void createPaymentAccounts(int count, java.time.Duration ttl) throws Exception {
+        safetyGate.assertSafeToRun();
+        if (count < 1 || count > 10) {
+            throw new IllegalArgumentException("i343d1.count must be between 1 and 10");
+        }
+        if (ttl == null || ttl.isNegative() || ttl.isZero() || ttl.compareTo(MAX_SESSION_TTL) > 0) {
+            throw new IllegalArgumentException("i343d1.session-ttl must be between 1s and 72h");
+        }
+        Long vaultAppId = appRegistryService.requireActiveApp(I343d1Constants.APP_CODE).appId();
+        String wechatAppId = requireWechatAppId(I343d1Constants.APP_CODE);
+        String batch = java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
+                .withZone(java.time.ZoneOffset.UTC).format(Instant.now());
+
+        ArrayNode accounts = objectMapper.createArrayNode();
+        ArrayNode metaAccounts = objectMapper.createArrayNode();
+        for (int k = 1; k <= count; k++) {
+            String label = "pay-" + batch + "-" + k;
+            Long userId = createAccount(vaultAppId, wechatAppId, label).userId();
+            AccountSeed seed = issueSession(label, vaultAppId, userId, ttl);
+            ObjectNode a = accounts.addObject();
+            ObjectNode m = metaAccounts.addObject();
+            for (ObjectNode node : List.of(a, m)) {
+                node.put("label", label);
+                node.put("openid", seed.openid());
+                node.put("userId", userId);
+                node.put("appId", vaultAppId);
+                node.put("sessionId", seed.sessionId());
+                node.put("sessionExpiresAt", Instant.now().plus(ttl).toString());
+                node.put("membershipAtCreation", "NONE");
+            }
+            a.put("accessToken", seed.accessToken());
+        }
+
+        Path tokenPath = Path.of(I343d1Constants.PAYMENT_ACCOUNTS_FILE);
+        Files.createDirectories(tokenPath.getParent());
+        ObjectNode root = objectMapper.createObjectNode();
+        root.put("generatedAt", Instant.now().toString());
+        root.put("batch", batch);
+        root.put("baseUrl", "http://127.0.0.1:8081");
+        root.put("appCode", I343d1Constants.APP_CODE);
+        root.put("warning", "SECRET — gitignored; do not paste into reports or commit");
+        root.set("accounts", accounts);
+        ObjectNode metaRoot = objectMapper.createObjectNode();
+        metaRoot.put("generatedAt", Instant.now().toString());
+        metaRoot.put("batch", batch);
+        metaRoot.set("accounts", metaAccounts);
+        objectMapper.writerWithDefaultPrettyPrinter().writeValue(tokenPath.toFile(), root);
+        objectMapper.writerWithDefaultPrettyPrinter().writeValue(
+                Path.of(I343d1Constants.PAYMENT_ACCOUNTS_META_FILE).toFile(), metaRoot);
+        log.info("Created {} fresh payment test accounts batch={} (tokens written to gitignored file)", count, batch);
+    }
+
+    private AccountSeed issueSession(String label, Long appId, Long userId, java.time.Duration ttl) {
+        String raw = sessionTokenGenerator.generateRawToken();
+        AuthSessionEntity session = authSessionRepository.saveAndFlush(AuthSessionEntity.create(
+                appId, userId, tokenHasher.sha256Hex(raw), Instant.now().plus(ttl)));
+        log.info("Issued fixture session label={} userId={} sessionId={} ttl={}",
+                label, userId, session.getId(), ttl);
+        return new AccountSeed(label, I343d1Constants.openid(label), userId, appId, raw, session.getId());
     }
 
     public void clean() {
@@ -263,6 +383,14 @@ public class I343d1FixtureService {
 
         if (!userIds.isEmpty()) {
             String in = String.join(",", userIds.stream().map(String::valueOf).toList());
+            // Payment test orders of fixture users (FK children first).
+            String orderSelect = "SELECT id FROM payment_orders WHERE user_id IN (" + in + ")";
+            String orderNoSelect = "SELECT order_no FROM payment_orders WHERE user_id IN (" + in + ")";
+            jdbcTemplate.update("DELETE FROM payment_order_events WHERE order_id IN (" + orderSelect + ")");
+            jdbcTemplate.update("DELETE FROM payment_order_requests WHERE user_id IN (" + in + ")");
+            jdbcTemplate.update("DELETE FROM payment_notifications WHERE order_no IN (" + orderNoSelect + ")");
+            jdbcTemplate.update("DELETE FROM payment_provider_calls WHERE order_no IN (" + orderNoSelect + ")");
+            jdbcTemplate.update("DELETE FROM payment_orders WHERE user_id IN (" + in + ")");
             jdbcTemplate.update("DELETE FROM auth_sessions WHERE user_id IN (" + in + ")");
             jdbcTemplate.update("DELETE FROM membership_grants WHERE user_id IN (" + in + ")");
             jdbcTemplate.update("DELETE FROM membership_entitlements WHERE user_id IN (" + in + ")");
@@ -370,6 +498,7 @@ public class I343d1FixtureService {
             case "monthly", "yearly", "lifetime", "stack" -> "ACTIVE";
             case "expired" -> "EXPIRED";
             case "revoked" -> "REVOKED";
+            case "pay-1", "pay-2", "pay-3" -> "VARIES";
             default -> "UNKNOWN";
         };
     }

@@ -12,8 +12,14 @@ public final class I343d1Constants {
     public static final String OTHER_PACKAGE = "com.aurora.i343d1.other";
 
     public static final String PROP_COMMAND = "i343d1.command";
-    public static final String TOKEN_FILE = "build/i343d1-sessions.local.json";
-    public static final String META_FILE = "build/i343d1-accounts.meta.json";
+    public static final String PROP_SESSION_TTL = "i343d1.session-ttl";
+    /** Under .local/ (gitignored, untouched by gradlew clean). Never commit or paste these files. */
+    public static final String TOKEN_FILE = ".local/i343d1/sessions.local.json";
+    public static final String META_FILE = ".local/i343d1/accounts.meta.json";
+    /** Latest batch of fresh payment test accounts (new-pay-accounts). */
+    public static final String PAYMENT_ACCOUNTS_FILE = ".local/i343d1/payment-accounts.local.json";
+    public static final String PAYMENT_ACCOUNTS_META_FILE = ".local/i343d1/payment-accounts.meta.json";
+    public static final String PROP_COUNT = "i343d1.count";
 
     /** Past instant for EXPIRED membership grants (CLI Clock only; standing server uses system UTC). */
     public static final String EXPIRED_GRANT_INSTANT = "2020-01-15T00:00:00Z";
@@ -27,6 +33,13 @@ public final class I343d1Constants {
             "expired",
             "revoked",
             "other-app-none"
+    };
+
+    /** Payment test accounts: start without membership; their state changes as test orders are paid. */
+    public static final String[] PAYMENT_LABELS = {
+            "pay-1",
+            "pay-2",
+            "pay-3"
     };
 
     private I343d1Constants() {

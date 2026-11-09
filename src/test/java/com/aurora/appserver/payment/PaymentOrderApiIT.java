@@ -205,13 +205,11 @@ class PaymentOrderApiIT {
 
         assertThat(order.get("amountFen").asInt()).isEqualTo(1990);
         assertThat(order.get("status").asText()).isEqualTo("PENDING_PAYMENT");
-        assertThat(order.get("pay").get("kind").asText()).isEqualTo("URL");
+        // Fake provider: test payment instruction only, never a (fake) website link.
+        assertThat(order.get("pay").get("kind").asText()).isEqualTo("TEST");
+        assertThat(order.get("pay").has("value")).isFalse();
         String orderNo = order.get("orderNo").asText();
         assertThat(orderNo).matches("^CV\\d{14}[A-Z2-7]{12}$");
-        assertThat(order.get("pay").get("value").asText())
-                .startsWith(FakePaymentProvider.CHECKOUT_BASE)
-                .contains("out_trade_no=" + orderNo)
-                .contains("money=19.90");
 
         Map<String, Object> row = orderRow(orderNo);
         assertThat(((Number) row.get("user_id")).longValue()).isEqualTo(login.userId());
@@ -286,7 +284,8 @@ class PaymentOrderApiIT {
         JsonNode second = createOk(login, "MONTHLY", requestId);
 
         assertThat(second.get("orderNo").asText()).isEqualTo(first.get("orderNo").asText());
-        assertThat(second.get("pay").get("value").asText()).isEqualTo(first.get("pay").get("value").asText());
+        assertThat(second.get("pay")).isEqualTo(first.get("pay"));
+        assertThat(second.get("expiresAt").asText()).isEqualTo(first.get("expiresAt").asText());
         assertThat(orderCount(login.userId())).isEqualTo(1);
         assertThat(requestCount(login.userId())).isEqualTo(1);
     }
@@ -407,7 +406,8 @@ class PaymentOrderApiIT {
 
         assertThat(fetched.get("status").asText()).isEqualTo("PENDING_PAYMENT");
         assertThat(fetched.get("amountFen").asInt()).isEqualTo(2990);
-        assertThat(fetched.get("pay").get("value").asText()).isEqualTo(created.get("pay").get("value").asText());
+        assertThat(fetched.get("pay").get("kind").asText()).isEqualTo("TEST");
+        assertThat(fetched.get("pay")).isEqualTo(created.get("pay"));
         assertThat(fetched.has("paidAt")).isFalse();
 
         mockMvc.perform(get("/api/v1/payment/orders/{orderNo}", "bad-order-no")

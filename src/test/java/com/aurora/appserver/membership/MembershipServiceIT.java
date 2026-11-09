@@ -260,7 +260,7 @@ class MembershipServiceIT {
         Long userId = createUser(appAId);
         String ref = uniqueRef("rev-1");
         grant(appAId, userId, PlanCode.MONTHLY, ref);
-        MembershipStatusView view = membershipService.revoke(appAId, GrantSourceType.PAYMENT, ref, "refund");
+        MembershipStatusView view = membershipService.revoke(appAId, GrantSourceType.ADMIN, ref, "refund");
         assertThat(view.status()).isEqualTo(MembershipStatus.REVOKED);
         assertThat(view.activeGrantCount()).isZero();
     }
@@ -270,8 +270,8 @@ class MembershipServiceIT {
         Long userId = createUser(appAId);
         String ref = uniqueRef("rev-idem");
         grant(appAId, userId, PlanCode.MONTHLY, ref);
-        membershipService.revoke(appAId, GrantSourceType.PAYMENT, ref, "once");
-        MembershipStatusView again = membershipService.revoke(appAId, GrantSourceType.PAYMENT, ref, "twice");
+        membershipService.revoke(appAId, GrantSourceType.ADMIN, ref, "once");
+        MembershipStatusView again = membershipService.revoke(appAId, GrantSourceType.ADMIN, ref, "twice");
         assertThat(again.status()).isEqualTo(MembershipStatus.REVOKED);
     }
 
@@ -284,7 +284,7 @@ class MembershipServiceIT {
         ClockConfig.CLOCK.advance(Duration.ofDays(10));
         grant(appAId, userId, PlanCode.MONTHLY, refB);
         MembershipStatusView afterRevoke = membershipService.revoke(
-                appAId, GrantSourceType.PAYMENT, refA, "partial-refund");
+                appAId, GrantSourceType.ADMIN, refA, "partial-refund");
         assertThat(afterRevoke.status()).isEqualTo(MembershipStatus.ACTIVE);
         assertThat(afterRevoke.membershipStartedAt()).isEqualTo(Instant.parse("2026-01-11T00:00:00Z"));
         assertThat(afterRevoke.membershipExpiresAt()).isEqualTo(Instant.parse("2026-02-10T00:00:00Z"));
@@ -299,7 +299,7 @@ class MembershipServiceIT {
         grant(appAId, userId, PlanCode.MONTHLY, refM);
         grant(appAId, userId, PlanCode.LIFETIME, refL);
         MembershipStatusView view = membershipService.revoke(
-                appAId, GrantSourceType.PAYMENT, refL, "refund-life");
+                appAId, GrantSourceType.ADMIN, refL, "refund-life");
         assertThat(view.lifetime()).isFalse();
         assertThat(view.status()).isEqualTo(MembershipStatus.ACTIVE);
         assertThat(view.membershipExpiresAt()).isEqualTo(Instant.parse("2026-01-31T00:00:00Z"));
@@ -343,9 +343,32 @@ class MembershipServiceIT {
     }
 
     @Test
+    void genericGrantRejectsPaymentSource() {
+        Long userId = createUser(appAId);
+        assertThatThrownBy(() -> membershipService.grant(new GrantCommand(
+                appAId, userId, PlanCode.MONTHLY, GrantSourceType.PAYMENT, uniqueRef("direct-pay"), "order-x")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.MEMBERSHIP_GRANT_SOURCE_INVALID);
+        assertThat(membershipService.getStatus(appAId, userId).status()).isEqualTo(MembershipStatus.NONE);
+
+        assertThat(membershipService.grant(new GrantCommand(
+                appAId, userId, PlanCode.MONTHLY, GrantSourceType.PROMOTION, uniqueRef("promo"), null))
+                .created()).isTrue();
+    }
+
+    @Test
+    void grantForPaidOrderRejectsUnknownOrder() {
+        assertThatThrownBy(() -> membershipService.grantForPaidOrder(appAId, "CV00000000000000NOTEXIST000"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(ex -> ((BusinessException) ex).getErrorCode())
+                .isEqualTo(ApiErrorCode.PAYMENT_ORDER_NOT_CONFIRMED);
+    }
+
+    @Test
     void revokeMissingGrantFails() {
         assertThatThrownBy(() ->
-                        membershipService.revoke(appAId, GrantSourceType.PAYMENT, uniqueRef("missing-ref"), null))
+                        membershipService.revoke(appAId, GrantSourceType.ADMIN, uniqueRef("missing-ref"), null))
                 .isInstanceOf(BusinessException.class)
                 .extracting(ex -> ((BusinessException) ex).getErrorCode())
                 .isEqualTo(ApiErrorCode.MEMBERSHIP_GRANT_NOT_FOUND);
@@ -367,7 +390,7 @@ class MembershipServiceIT {
 
     private GrantResult grant(Long appId, Long userId, PlanCode planCode, String sourceRef) {
         return membershipService.grant(new GrantCommand(
-                appId, userId, planCode, GrantSourceType.PAYMENT, sourceRef, "order-" + sourceRef));
+                appId, userId, planCode, GrantSourceType.ADMIN, sourceRef, "order-" + sourceRef));
     }
 
     private Long createUser(Long appId) {

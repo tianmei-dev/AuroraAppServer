@@ -27,7 +27,7 @@
 | `src/main/java/.../fixture/i343d1/*` | SafetyGate、MutableClock、FixtureService、Runner、Config |
 | `scripts/i343d1-fixture.bat` | seed/clean CLI |
 | `scripts/i343d1-verify-me.ps1` | 对常驻 8081 验 `/me`（不打印 Token） |
-| `.gitignore` | 忽略 `build/i343d1-sessions.local.json` |
+| `.gitignore` | 忽略 `.local/i343d1/sessions.local.json` |
 | `docs/Task-I3.4.3-D1-交付报告.md` | 本报告 |
 
 **未修改：** TEST 白名单、微信登录、Membership API 字段、支付模块、8080 配置、Android 客户端。
@@ -49,8 +49,8 @@
 1. `scripts\i343d1-fixture.bat seed`  
 2. 在 **s32it** 下创建合成用户（openid=`i343d1-<label>`，非真实微信）  
 3. `AuthSessionService.issueSession` 签发**真实** Bearer  
-4. Token **只写入** `build/i343d1-sessions.local.json`（gitignore）  
-5. 元数据（无 Token）写入 `build/i343d1-accounts.meta.json`  
+4. Token **只写入** `.local/i343d1/sessions.local.json`（gitignore）  
+5. 元数据（无 Token）写入 `.local/i343d1/accounts.meta.json`  
 
 **不会**打印 Token 到日志或本报告。  
 **没有**测试登录 HTTP 接口。
@@ -111,7 +111,7 @@ powershell -File scripts\i343d1-verify-me.ps1
 
 1. **服务地址：** `http://192.168.0.107:8081`（或本机模拟器 `10.0.2.2:8081`）  
 2. **App Code：** `calculator_vault`  
-3. **取 Session：** 在 Server 仓库运行 `scripts\i343d1-fixture.bat seed` 后，从本机 **`build/i343d1-sessions.local.json`** 读取对应 label 的 `accessToken`（**勿提交、勿贴到聊天/报告**）  
+3. **取 Session：** 在 Server 仓库运行 `scripts\i343d1-fixture.bat seed` 后，从本机 **`.local/i343d1/sessions.local.json`** 读取对应 label 的 `accessToken`（**勿提交、勿贴到聊天/报告**）  
 4. **调用：** `GET /api/v1/membership/me` + `Authorization: Bearer …` + `X-App-Code`  
 5. **注入方式：** 属 **Android D2**（不改 APK 的本 Task 范围外）；Server 只提供真实 Token 文件  
 6. **grant/revoke/再 seed：** 仅通过 Server CLI；无生产 grant HTTP  

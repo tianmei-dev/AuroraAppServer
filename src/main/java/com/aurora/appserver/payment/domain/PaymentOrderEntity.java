@@ -200,6 +200,109 @@ public class PaymentOrderEntity {
         return effectiveStatus(now) == PaymentOrderStatus.PENDING_PAYMENT;
     }
 
+    // ------------------------------------------------------------------
+    // State transitions. Callers must hold the row lock (SELECT ... FOR UPDATE).
+    // ------------------------------------------------------------------
+
+    /** PENDING_PAYMENT or EXPIRED -> PAID. Returns false if already PAID/FULFILLED. */
+    public boolean markPaid(
+            Instant now,
+            String providerTradeNo,
+            String upstreamTradeNo,
+            String paidChannelRaw,
+            int paidAmountFen,
+            String providerPaidAtRaw
+    ) {
+        if (status != PaymentOrderStatus.PENDING_PAYMENT && status != PaymentOrderStatus.EXPIRED) {
+            return false;
+        }
+        // Late = confirmed only after we had already expired the order locally.
+        boolean late = status == PaymentOrderStatus.EXPIRED;
+        this.status = PaymentOrderStatus.PAID;
+        this.paidAt = now;
+        if (providerTradeNo != null && !providerTradeNo.isBlank()) {
+            this.providerTradeNo = truncate(providerTradeNo, 64);
+        }
+        this.upstreamTradeNo = truncate(upstreamTradeNo, 64);
+        this.paidChannelRaw = truncate(paidChannelRaw, 32);
+        this.paidAmountFen = paidAmountFen;
+        this.providerPaidAtRaw = truncate(providerPaidAtRaw, 32);
+        this.nextFulfillAt = now;
+        if (late) {
+            this.latePaid = true;
+            this.anomalyCode = PaymentAnomaly.LATE_PAYMENT.name();
+        }
+        return true;
+    }
+
+    /** PENDING_PAYMENT -> EXPIRED. Only after a provider query (or inconclusive grace) says unpaid. */
+    public boolean markExpired(Instant now) {
+        if (status != PaymentOrderStatus.PENDING_PAYMENT || now.isBefore(expiresAt)) {
+            return false;
+        }
+        this.status = PaymentOrderStatus.EXPIRED;
+        this.expiredAt = now;
+        return true;
+    }
+
+    /** PAID -> FULFILLED. */
+    public boolean markFulfilled(Instant now, Long grantId) {
+        if (status != PaymentOrderStatus.PAID) {
+            return false;
+        }
+        this.status = PaymentOrderStatus.FULFILLED;
+        this.fulfilledAt = now;
+        this.membershipGrantId = grantId;
+        this.nextFulfillAt = null;
+        this.lastFulfillError = null;
+        return true;
+    }
+
+    /** Claims a fulfillment attempt for {@code lease}; false if not PAID or another worker holds it. */
+    public boolean claimFulfillment(Instant now, java.time.Duration lease) {
+        if (status != PaymentOrderStatus.PAID) {
+            return false;
+        }
+        if (nextFulfillAt != null && nextFulfillAt.isAfter(now)) {
+            return false;
+        }
+        this.nextFulfillAt = now.plus(lease);
+        this.fulfillAttempts++;
+        return true;
+    }
+
+    public void recordFulfillFailure(Instant retryAt, String error) {
+        if (status == PaymentOrderStatus.PAID) {
+            this.nextFulfillAt = retryAt;
+            this.lastFulfillError = truncate(error, 255);
+        }
+    }
+
+    /** Claims a provider query slot; false when queried more recently than {@code minInterval}. */
+    public boolean claimQuery(Instant now, java.time.Duration minInterval) {
+        if (lastQueryAt != null && lastQueryAt.plus(minInterval).isAfter(now)) {
+            return false;
+        }
+        recordQueryAttempt(now);
+        return true;
+    }
+
+    public void recordQueryAttempt(Instant now) {
+        this.lastQueryAt = now;
+        this.queryAttempts++;
+    }
+
+    public void markAnomaly(PaymentAnomaly anomaly) {
+        this.anomalyCode = anomaly.name();
+    }
+
+    private static String truncate(String value, int max) {
+        if (value == null) {
+            return null;
+        }
+        return value.length() <= max ? value : value.substring(0, max);
+    }
+
     public Long getId() {
         return id;
     }

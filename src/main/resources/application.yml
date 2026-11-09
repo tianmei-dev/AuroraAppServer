@@ -76,10 +76,27 @@ aurora:
     order-ttl: 30m
     reuse-min-remaining: 5m
     order-no-prefix: CV
+    notify-confirm-wait: 3s
+    jobs:
+      enabled: ${PAYMENT_JOBS_ENABLED:true}
+      initial-delay-ms: 5000
+      interval-ms: 30000
+      pending-query-interval: 2m
+      late-patrol-window: 24h
+      late-patrol-interval: 10m
+      notification-retry-interval: 2m
+      notification-retry-window: 7d
+      inconclusive-expire-grace: 30m
+      inconclusive-min-attempts: 3
+      fulfill-lease: 2m
     yusen:
       gateway-base-url: ${YUSEN_GATEWAY_BASE_URL:}
       pid: ${YUSEN_PID:}
       key: ${YUSEN_KEY:}
       notify-url: ${YUSEN_NOTIFY_URL:}
       return-url: ${YUSEN_RETURN_URL:}
+      # Outbound calls to the real gateway are refused unless explicitly enabled.
+      network-enabled: ${YUSEN_NETWORK_ENABLED:false}
+      connect-timeout: 3s
+      request-timeout: 5s
 

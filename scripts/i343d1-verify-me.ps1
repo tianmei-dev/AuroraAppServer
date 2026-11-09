@@ -1,13 +1,13 @@
 ﻿# Verifies GET /api/v1/membership/me against standing 8081 using gitignored token file.
 # Prints statuses only — never prints accessToken values.
 param(
-  [string]$TokenFile = "build/i343d1-sessions.local.json",
+  [string]$TokenFile = ".local/i343d1/sessions.local.json",
   [string]$BaseUrl = "http://127.0.0.1:8081"
 )
 
 $ErrorActionPreference = "Stop"
 if (-not (Test-Path $TokenFile)) {
-  Write-Error "Token file missing: $TokenFile (run scripts\i343d1-fixture.bat seed first)"
+  Write-Error "Token file missing: $TokenFile (run scripts\i343d1-fixture.bat sessions first)"
 }
 
 $json = Get-Content $TokenFile -Raw | ConvertFrom-Json
@@ -35,6 +35,9 @@ foreach ($acc in $json.accounts) {
     if ($acc.expectedHttp) {
       $ok = $false
       $note = "expected HTTP $($acc.expectedHttp) but got $($resp.StatusCode)"
+    } elseif ($expected -eq "VARIES") {
+      $ok = ($body.code -eq 0)
+      $note = "payment test account status=$status planType=$($body.data.planType) lifetime=$($body.data.isLifetime)"
     } elseif ($expected) {
       $ok = ($body.code -eq 0 -and $status -eq $expected)
       $note = "status=$status planType=$($body.data.planType) lifetime=$($body.data.isLifetime)"

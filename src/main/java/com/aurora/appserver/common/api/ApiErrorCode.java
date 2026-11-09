@@ -28,6 +28,7 @@ public enum ApiErrorCode {
     TRIAL_CAP_INVALID(40010, "Trial remainingSecondsCap is invalid"),
     PAYMENT_CLIENT_REQUEST_CONFLICT(40011, "clientRequestId was already used for a different plan"),
     PAYMENT_LIFETIME_ALREADY_ACTIVE(40012, "Lifetime membership is already active"),
+    PAYMENT_ORDER_NOT_CONFIRMED(40013, "Payment order is not confirmed as paid"),
 
     UNAUTHORIZED(40100, "Unauthorized"),
     SESSION_EXPIRED(40101, "Session expired"),

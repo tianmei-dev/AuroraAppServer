@@ -1,6 +1,6 @@
-# S3.2 / I3.2-A isolated integration profile.
-# Does NOT load application-local.yml. Does NOT touch aurora_app (3308).
-# Start: bootRun-s32it.bat  →  http://127.0.0.1:8081
+# Isolated integration profile (S3.2 / I3.4.3-D1 / I3.5.3-C). Fixture build only (src/fixture):
+# never packaged in the production bootJar. Does NOT load application-local.yml and never
+# touches aurora_app (3308). Start: bootRun-s32it.bat -> http://127.0.0.1:8081
 server:
   port: ${SERVER_PORT:8081}
 
@@ -17,7 +17,7 @@ aurora:
   wechat:
     apps:
       calculator_vault:
-        # Placeholders only — WeChat login is not part of I3.2-A device-trial isolation.
+        # Placeholders only — real WeChat login is not part of the isolated environment.
         app-id: ${WECHAT_APP_CALCULATOR_VAULT_APP_ID:wx_s32it_calculator}
         app-secret: ${WECHAT_APP_CALCULATOR_VAULT_APP_SECRET:s32it-placeholder-secret}
   trial:
@@ -26,3 +26,7 @@ aurora:
     duration: 72h
     rate-limit-per-window: 30
     rate-limit-window: 1m
+  payment:
+    # FakePaymentProvider (fixture build) only. Yusen stays unconfigured: no real gateway, no real money.
+    provider: FAKE
+    environment: TEST

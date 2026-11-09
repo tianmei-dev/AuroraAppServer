@@ -45,3 +45,16 @@ aurora:
     order-ttl: 30m
     reuse-min-remaining: 5m
     order-no-prefix: CV
+    notify-confirm-wait: 1s
+    jobs:
+      # Tests drive PaymentJobService.runCycle() explicitly for deterministic results.
+      enabled: false
+    yusen:
+      # Fictional merchant. Outbound HTTP goes to StubYusenHttpTransport (src/test); the real
+      # transport stays disabled.
+      gateway-base-url: https://gateway.example.test
+      pid: "1001"
+      key: fictional-merchant-key-0001
+      notify-url: https://api.example.test/api/v1/payment/notify/yusen
+      return-url: https://api.example.test/api/v1/payment/return/yusen
+      network-enabled: false

@@ -90,6 +90,34 @@ public class MembershipGrantEntity {
         return grant;
     }
 
+    /**
+     * PAYMENT grant from a confirmed order's snapshot: plan, duration and lifetime flag come from
+     * the order, not from the current plan row (which may since have been repriced or disabled).
+     */
+    public static MembershipGrantEntity createFromPaidOrderSnapshot(
+            Long appId,
+            Long userId,
+            Long planId,
+            PlanCode planCode,
+            Integer durationDays,
+            boolean lifetime,
+            String orderNo,
+            Instant grantedAt
+    ) {
+        MembershipGrantEntity grant = new MembershipGrantEntity();
+        grant.appId = appId;
+        grant.userId = userId;
+        grant.planId = planId;
+        grant.planCode = planCode;
+        grant.sourceType = GrantSourceType.PAYMENT;
+        grant.sourceRef = orderNo;
+        grant.orderId = orderNo;
+        grant.durationDays = lifetime ? null : durationDays;
+        grant.lifetime = lifetime;
+        grant.grantedAt = grantedAt;
+        return grant;
+    }
+
     /** Builds a detached grant for entitlement replay unit tests (no persistence). */
     public static MembershipGrantEntity forComputation(
             long id,

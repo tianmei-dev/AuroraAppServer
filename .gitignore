@@ -41,3 +41,7 @@ logs/
 # I3.4.3-D1 isolation fixture secrets (never commit)
 build/i343d1-sessions.local.json
 **/i343d1-sessions.local.json
+
+# Isolated-environment secrets and logs (fixture tokens, control token). Outside build/ so
+# gradlew clean never deletes them; never commit.
+.local/

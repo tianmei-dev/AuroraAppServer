@@ -21,6 +21,8 @@ public record PaymentOrderResponse(
         PayInfo pay
 ) {
 
+    /** kind=URL: open value (Yusen cashier). kind=TEST: isolated env only, no value; show a test hint. */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public record PayInfo(String kind, String value) {
 
         @Override

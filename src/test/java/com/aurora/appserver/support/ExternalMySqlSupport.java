@@ -1,5 +1,7 @@
 package com.aurora.appserver.support;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.springframework.test.context.DynamicPropertyRegistry;
 
 /**
@@ -14,6 +16,11 @@ public final class ExternalMySqlSupport {
     }
 
     public static void registerDatasource(DynamicPropertyRegistry registry) {
+        datasourceProperties().forEach((key, value) -> registry.add(key, () -> value));
+    }
+
+    /** Same settings as {@link #registerDatasource}, for manually started application contexts. */
+    public static Map<String, Object> datasourceProperties() {
         String host = env("TEST_DB_HOST", "127.0.0.1");
         String port = env("TEST_DB_PORT", "3307");
         String db = env("TEST_DB_NAME", "aurora_app_test");
@@ -23,10 +30,12 @@ public final class ExternalMySqlSupport {
         String url = "jdbc:mysql://" + host + ":" + port + "/" + db
                 + "?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&connectionTimeZone=UTC&allowPublicKeyRetrieval=true&useSSL=false";
 
-        registry.add("spring.datasource.url", () -> url);
-        registry.add("spring.datasource.username", () -> user);
-        registry.add("spring.datasource.password", () -> password);
-        registry.add("spring.datasource.driver-class-name", () -> "com.mysql.cj.jdbc.Driver");
+        Map<String, Object> props = new LinkedHashMap<>();
+        props.put("spring.datasource.url", url);
+        props.put("spring.datasource.username", user);
+        props.put("spring.datasource.password", password);
+        props.put("spring.datasource.driver-class-name", "com.mysql.cj.jdbc.Driver");
+        return props;
     }
 
     private static String env(String key, String defaultValue) {

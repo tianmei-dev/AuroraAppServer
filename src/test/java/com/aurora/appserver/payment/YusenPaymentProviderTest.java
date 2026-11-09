@@ -7,15 +7,21 @@ import com.aurora.appserver.payment.config.PaymentProperties;
 import com.aurora.appserver.payment.provider.CheckoutRequest;
 import com.aurora.appserver.payment.provider.PaymentLink;
 import com.aurora.appserver.payment.provider.PaymentNotificationRejectedException;
+import com.aurora.appserver.payment.provider.PaymentQueryResult;
 import com.aurora.appserver.payment.provider.VerifiedNotification;
+import com.aurora.appserver.payment.provider.yusen.YusenHttpTransport;
 import com.aurora.appserver.payment.provider.yusen.YusenPaymentProvider;
 import com.aurora.appserver.payment.provider.yusen.YusenSigner;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
 import java.net.URI;
 import java.net.URLDecoder;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 /** Pure unit tests with a fictional merchant. No network, no real credentials. */
@@ -132,14 +138,91 @@ class YusenPaymentProviderTest {
     }
 
     @Test
-    void queryIsNotEnabledAndUnconfiguredProviderRefusesToBuildLinks() {
-        assertThatThrownBy(() -> provider().queryOrder("CV1"))
-                .isInstanceOf(UnsupportedOperationException.class);
+    void defaultTransportRefusesNetworkAndUnconfiguredProviderRefusesLinks() {
+        PaymentQueryResult refused = provider().queryOrder("CV1");
+        assertThat(refused.outcome()).isEqualTo(PaymentQueryResult.Outcome.ERROR);
+        assertThat(refused.isConclusive()).isFalse();
+        assertThat(refused.providerMsg()).isEqualTo("transport_IllegalStateException");
 
         YusenPaymentProvider unconfigured = new YusenPaymentProvider(new PaymentProperties());
         assertThat(unconfigured.isConfigured()).isFalse();
+        assertThat(unconfigured.queryOrder("CV1").providerMsg()).isEqualTo("not_configured");
         assertThatThrownBy(() -> unconfigured.buildCheckoutLink(new CheckoutRequest("CV1", 590, "月卡")))
                 .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void queryFollowsDocumentedRequestAndParsesPaidResponse() {
+        AtomicReference<URI> seen = new AtomicReference<>();
+        YusenPaymentProvider provider = provider((uri, timeout) -> {
+            seen.set(uri);
+            return new YusenHttpTransport.Response(200, """
+                    {"code":1,"msg":"查询订单号成功！","trade_no":"2016080622555342651",
+                     "out_trade_no":"CV20261106131500ABCDEFGH2345","api_trade_no":"4200001",
+                     "type":"alipay","pid":1001,"addtime":"2026-11-06 22:55:52",
+                     "endtime":"2026-11-06 22:56:10","name":"年卡","money":"19.90","status":1,
+                     "param":"","buyer":""}
+                    """);
+        });
+
+        PaymentQueryResult result = provider.queryOrder("CV20261106131500ABCDEFGH2345");
+
+        URI uri = seen.get();
+        assertThat(uri.getScheme() + "://" + uri.getHost() + uri.getPath())
+                .isEqualTo("https://gateway.example.test/api.php");
+        assertThat(parseQuery(uri.getRawQuery()))
+                .containsEntry("act", "order")
+                .containsEntry("pid", "1001")
+                .containsEntry("key", KEY)
+                .containsEntry("out_trade_no", "CV20261106131500ABCDEFGH2345");
+
+        assertThat(result.outcome()).isEqualTo(PaymentQueryResult.Outcome.PAID);
+        assertThat(result.orderNo()).isEqualTo("CV20261106131500ABCDEFGH2345");
+        assertThat(result.merchantPid()).isEqualTo("1001");
+        assertThat(result.amountFen()).contains(1990);
+        assertThat(result.providerTradeNo()).isEqualTo("2016080622555342651");
+        assertThat(result.upstreamTradeNo()).isEqualTo("4200001");
+        assertThat(result.channelRaw()).isEqualTo("alipay");
+        assertThat(result.toString()).doesNotContain(KEY);
+    }
+
+    @Test
+    void queryMapsUnpaidAndEveryFailureToNonFailureOutcomes() {
+        assertThat(provider((u, t) -> new YusenHttpTransport.Response(200,
+                "{\"code\":1,\"out_trade_no\":\"CV1\",\"pid\":1001,\"money\":\"5.90\",\"status\":0}"))
+                .queryOrder("CV1").outcome()).isEqualTo(PaymentQueryResult.Outcome.NOT_CONFIRMED);
+
+        PaymentQueryResult notFound = provider((u, t) -> new YusenHttpTransport.Response(200,
+                "{\"code\":-1,\"msg\":\"订单号不存在 key=" + KEY + "\"}")).queryOrder("CV1");
+        assertThat(notFound.outcome()).isEqualTo(PaymentQueryResult.Outcome.ERROR);
+        assertThat(notFound.providerCode()).isEqualTo("-1");
+        assertThat(notFound.providerMsg()).doesNotContain(KEY).contains("***");
+
+        assertThat(provider((u, t) -> new YusenHttpTransport.Response(502, "bad gateway"))
+                .queryOrder("CV1").outcome()).isEqualTo(PaymentQueryResult.Outcome.ERROR);
+        assertThat(provider((u, t) -> new YusenHttpTransport.Response(200, "<html>"))
+                .queryOrder("CV1").providerMsg()).isEqualTo("invalid_json");
+        assertThat(provider((u, t) -> new YusenHttpTransport.Response(200, "{\"code\":1,\"status\":7}"))
+                .queryOrder("CV1").providerMsg()).isEqualTo("unknown_status");
+        assertThat(provider((u, t) -> {
+            throw new HttpTimeoutException("timed out " + u);
+        }).queryOrder("CV1").outcome()).isEqualTo(PaymentQueryResult.Outcome.TIMEOUT);
+
+        PaymentQueryResult io = provider((u, t) -> {
+            throw new IOException("connect failed " + u);
+        }).queryOrder("CV1");
+        assertThat(io.outcome()).isEqualTo(PaymentQueryResult.Outcome.ERROR);
+        assertThat(io.providerMsg()).isEqualTo("io_error");
+    }
+
+    private static YusenPaymentProvider provider(YusenHttpTransport transport) {
+        PaymentProperties properties = new PaymentProperties();
+        properties.getYusen().setGatewayBaseUrl("https://gateway.example.test/");
+        properties.getYusen().setPid("1001");
+        properties.getYusen().setKey(KEY);
+        properties.getYusen().setNotifyUrl(NOTIFY);
+        properties.getYusen().setReturnUrl(RETURN);
+        return new YusenPaymentProvider(properties, transport, new ObjectMapper());
     }
 
     @Test

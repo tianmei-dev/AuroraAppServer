@@ -10,32 +10,49 @@ import com.aurora.appserver.payment.provider.PaymentNotificationRejectedExceptio
 import com.aurora.appserver.payment.provider.PaymentProvider;
 import com.aurora.appserver.payment.provider.PaymentQueryResult;
 import com.aurora.appserver.payment.provider.VerifiedNotification;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.net.URI;
 import java.net.URLEncoder;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
  * Yusen unified checkout via submit.php without {@code type}, so the user picks the payment
  * method on Yusen's hosted cashier page (merchant doc "页面跳转支付": type 不传会跳转到收银台支付).
  *
- * <p>Network calls (order query) are not enabled yet; link building and notification
- * verification are pure computations.
+ * <p>Order query follows doc "[API]查询单个订单" (GET api.php?act=order). Outbound HTTP goes through
+ * {@link YusenHttpTransport}; the default transport refuses to connect unless explicitly enabled.
  */
 @Component
 public class YusenPaymentProvider implements PaymentProvider {
 
     static final String SUBMIT_PATH = "/submit.php";
+    static final String API_PATH = "/api.php";
     static final String TRADE_SUCCESS = "TRADE_SUCCESS";
     static final int NAME_MAX_BYTES = 127;
 
     private final PaymentProperties.Yusen config;
+    private final YusenHttpTransport transport;
+    private final ObjectMapper objectMapper;
 
-    public YusenPaymentProvider(PaymentProperties properties) {
+    @Autowired
+    public YusenPaymentProvider(PaymentProperties properties, YusenHttpTransport transport, ObjectMapper objectMapper) {
         this.config = properties.getYusen();
+        this.transport = transport;
+        this.objectMapper = objectMapper;
+    }
+
+    /** For pure unit tests: real transport (network disabled unless configured). */
+    public YusenPaymentProvider(PaymentProperties properties) {
+        this(properties, new JdkYusenHttpTransport(properties), new ObjectMapper());
     }
 
     @Override
@@ -104,9 +121,95 @@ public class YusenPaymentProvider implements PaymentProvider {
                 TRADE_SUCCESS.equals(tradeStatus));
     }
 
+    /**
+     * Mapping: code=1 & status=1 -> PAID; code=1 & status=0 -> NOT_CONFIRMED; anything else
+     * (code!=1 such as "order not found", HTTP error, bad JSON, timeout) -> inconclusive.
+     */
     @Override
     public PaymentQueryResult queryOrder(String orderNo) {
-        throw new UnsupportedOperationException("Yusen order query is not enabled");
+        if (!isConfigured()) {
+            return PaymentQueryResult.inconclusive(PaymentQueryResult.Outcome.ERROR, null, null, "not_configured");
+        }
+        URI uri = URI.create(gatewayBase() + API_PATH
+                + "?act=order&pid=" + encode(config.getPid())
+                + "&key=" + encode(config.getKey())
+                + "&out_trade_no=" + encode(orderNo));
+
+        YusenHttpTransport.Response response;
+        try {
+            response = transport.get(uri, config.getRequestTimeout());
+        } catch (HttpTimeoutException ex) {
+            return PaymentQueryResult.inconclusive(PaymentQueryResult.Outcome.TIMEOUT, null, null, "timeout");
+        } catch (IOException ex) {
+            return PaymentQueryResult.inconclusive(PaymentQueryResult.Outcome.ERROR, null, null, "io_error");
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return PaymentQueryResult.inconclusive(PaymentQueryResult.Outcome.ERROR, null, null, "interrupted");
+        } catch (RuntimeException ex) {
+            // Never propagate the message: transports may embed the request URI (with key).
+            return PaymentQueryResult.inconclusive(PaymentQueryResult.Outcome.ERROR, null, null,
+                    "transport_" + ex.getClass().getSimpleName());
+        }
+
+        if (response.status() != 200) {
+            return PaymentQueryResult.inconclusive(
+                    PaymentQueryResult.Outcome.ERROR, response.status(), null, "http_status");
+        }
+        JsonNode node;
+        try {
+            node = objectMapper.readTree(response.body() == null ? "" : response.body());
+        } catch (IOException ex) {
+            return PaymentQueryResult.inconclusive(PaymentQueryResult.Outcome.ERROR, 200, null, "invalid_json");
+        }
+        if (node == null || !node.isObject()) {
+            return PaymentQueryResult.inconclusive(PaymentQueryResult.Outcome.ERROR, 200, null, "invalid_json");
+        }
+
+        String code = text(node, "code");
+        String msg = redact(text(node, "msg"));
+        if (!"1".equals(code)) {
+            return PaymentQueryResult.inconclusive(PaymentQueryResult.Outcome.ERROR, 200, code, msg);
+        }
+
+        String status = text(node, "status");
+        PaymentQueryResult.Outcome outcome;
+        if ("1".equals(status)) {
+            outcome = PaymentQueryResult.Outcome.PAID;
+        } else if ("0".equals(status)) {
+            outcome = PaymentQueryResult.Outcome.NOT_CONFIRMED;
+        } else {
+            return PaymentQueryResult.inconclusive(PaymentQueryResult.Outcome.ERROR, 200, code, "unknown_status");
+        }
+        String amountRaw = text(node, "money");
+        return new PaymentQueryResult(
+                outcome,
+                text(node, "out_trade_no"),
+                text(node, "pid"),
+                text(node, "trade_no"),
+                text(node, "api_trade_no"),
+                amountRaw,
+                FenAmounts.parseYuanToFen(amountRaw),
+                text(node, "type"),
+                text(node, "endtime"),
+                200,
+                code,
+                msg);
+    }
+
+    private static String text(JsonNode node, String field) {
+        JsonNode value = node.get(field);
+        if (value == null || value.isNull()) {
+            return null;
+        }
+        return value.asText();
+    }
+
+    private String redact(String msg) {
+        if (msg == null) {
+            return null;
+        }
+        String key = config.getKey();
+        return key == null || key.isEmpty() ? msg : msg.replace(key, "***");
     }
 
     private void requireConfigured() {

@@ -8,6 +8,7 @@ import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.env.Environment;
+import org.springframework.context.annotation.Profile;
 import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Component;
 
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Component;
  * Hard stops the fixture unless profile is s32it and JDBC catalog is aurora_app_test.
  */
 @Component
+@Profile("s32it")
 public class I343d1SafetyGate {
 
     private static final Logger log = LoggerFactory.getLogger(I343d1SafetyGate.class);

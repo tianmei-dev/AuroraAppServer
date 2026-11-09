@@ -46,7 +46,9 @@ public class BearerTokenAuthenticationFilter extends OncePerRequestFilter {
         return path.startsWith("/actuator/health")
                 || path.equals("/api/v1/auth/wechat/login")
                 || path.equals("/api/v1/trial/device/activate")
-                || path.equals("/api/v1/membership/plans");
+                || path.equals("/api/v1/membership/plans")
+                || path.equals("/api/v1/payment/notify/yusen")
+                || path.equals("/api/v1/payment/return/yusen");
     }
 
     @Override

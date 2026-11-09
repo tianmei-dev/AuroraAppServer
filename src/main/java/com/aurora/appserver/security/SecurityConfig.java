@@ -42,6 +42,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/wechat/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/trial/device/activate").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/membership/plans").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/payment/notify/yusen").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/payment/return/yusen").permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex

@@ -27,5 +27,19 @@ public interface PaymentProvider {
      */
     VerifiedNotification verifyNotification(Map<String, String> params);
 
+    /**
+     * Authoritative order status from the provider. Must not throw for transport problems;
+     * those are reported as ERROR / TIMEOUT (inconclusive), never as "not paid".
+     */
     PaymentQueryResult queryOrder(String orderNo);
+
+    /** Body acknowledging a notification so the provider stops retrying (Yusen: "success"). */
+    default String notificationAck() {
+        return "success";
+    }
+
+    /** Body rejecting an untrusted notification. */
+    default String notificationReject() {
+        return "fail";
+    }
 }

@@ -228,6 +228,11 @@ public class PaymentOrderService {
                     .map(p -> p.buildCheckoutLink(new CheckoutRequest(
                             order.getOrderNo(), order.getAmountFen(), order.getPlanDisplayName())))
                     .orElse(null);
+            if (link != null && !PaymentLinkPolicy.allowed(order.getEnvironment(), link)) {
+                log.error("ALERT payment link kind={} not allowed in environment={} orderNo={}; withheld",
+                        link.kind(), order.getEnvironment(), order.getOrderNo());
+                link = null;
+            }
         }
         return new OrderView(order, effective, link, now);
     }

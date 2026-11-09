@@ -41,13 +41,29 @@ public class I343d1FixtureRunner implements ApplicationRunner {
                     fixtureService.seed();
                     log.info("I3.4.3-D1 command=seed completed");
                 }
+                case "sessions" -> {
+                    java.time.Duration ttl = java.time.Duration.parse(context.getEnvironment()
+                            .getProperty(I343d1Constants.PROP_SESSION_TTL, "PT12H"));
+                    log.info("I3.4.3-D1 command=sessions starting ttl={}", ttl);
+                    fixtureService.refreshSessions(ttl);
+                    log.info("I3.4.3-D1 command=sessions completed");
+                }
+                case "new-pay-accounts" -> {
+                    int count = Integer.parseInt(context.getEnvironment()
+                            .getProperty(I343d1Constants.PROP_COUNT, "3"));
+                    java.time.Duration ttl = java.time.Duration.parse(context.getEnvironment()
+                            .getProperty(I343d1Constants.PROP_SESSION_TTL, "PT12H"));
+                    log.info("I3.4.3-D1 command=new-pay-accounts starting count={} ttl={}", count, ttl);
+                    fixtureService.createPaymentAccounts(count, ttl);
+                    log.info("I3.4.3-D1 command=new-pay-accounts completed");
+                }
                 case "clean" -> {
                     log.info("I3.4.3-D1 command=clean starting");
                     fixtureService.clean();
                     log.info("I3.4.3-D1 command=clean completed");
                 }
                 default -> throw new IllegalArgumentException(
-                        "Unknown i343d1.command='" + command + "' (supported: seed, clean)");
+                        "Unknown i343d1.command='" + command + "' (supported: seed, sessions, new-pay-accounts, clean)");
             }
             status = 0;
         } catch (Exception ex) {

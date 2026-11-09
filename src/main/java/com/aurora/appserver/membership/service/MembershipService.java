@@ -32,7 +32,8 @@ import org.springframework.util.StringUtils;
 
 /**
  * Server-authoritative membership grant / revoke / status.
- * No public HTTP grant/revoke APIs — callers are internal services (future payment) and tests.
+ * No public HTTP grant/revoke APIs — callers are internal services and tests.
+ * PAYMENT grants are only created through {@link #grantForPaidOrder} from a confirmed order snapshot.
  */
 @Service
 public class MembershipService {
@@ -43,6 +44,7 @@ public class MembershipService {
     private final MembershipGrantRepository grantRepository;
     private final MembershipEntitlementRepository entitlementRepository;
     private final UserRepository userRepository;
+    private final PaidOrderSnapshotSource paidOrderSnapshotSource;
     private final Clock clock;
     private final Environment environment;
     private final MembershipService self;
@@ -52,6 +54,7 @@ public class MembershipService {
             MembershipGrantRepository grantRepository,
             MembershipEntitlementRepository entitlementRepository,
             UserRepository userRepository,
+            PaidOrderSnapshotSource paidOrderSnapshotSource,
             Clock clock,
             Environment environment,
             @Lazy MembershipService self
@@ -60,6 +63,7 @@ public class MembershipService {
         this.grantRepository = grantRepository;
         this.entitlementRepository = entitlementRepository;
         this.userRepository = userRepository;
+        this.paidOrderSnapshotSource = paidOrderSnapshotSource;
         this.clock = clock;
         this.environment = environment;
         this.self = self;
@@ -94,8 +98,16 @@ public class MembershipService {
     ) {
     }
 
+    /**
+     * Grants for ADMIN / PROMOTION / TEST sources. PAYMENT is rejected here: paid memberships
+     * must go through {@link #grantForPaidOrder} so they always match a confirmed order.
+     */
     public GrantResult grant(GrantCommand command) {
         validateGrantCommand(command);
+        if (command.sourceType() == GrantSourceType.PAYMENT) {
+            throw new BusinessException(ApiErrorCode.MEMBERSHIP_GRANT_SOURCE_INVALID,
+                    "PAYMENT grants require a confirmed payment order");
+        }
         requireUserInApp(command.appId(), command.userId());
         rejectTestSourceInProduction(command.sourceType());
         ensureEntitlementRowQuietly(command.appId(), command.userId());
@@ -145,6 +157,72 @@ public class MembershipService {
                 command.appId(), command.userId(), plan.getPlanCode(), command.sourceType(),
                 sourceRef, grant.getId());
         return new GrantResult(grant.getId(), true, statusInTx(command.appId(), command.userId()));
+    }
+
+    /**
+     * Idempotent PAYMENT grant for a server-confirmed (PAID / FULFILLED) order. Only the app and
+     * order number are accepted; user, plan, duration and lifetime flag are read from the order
+     * snapshot, so later plan repricing / disabling / duration changes never affect fulfilment.
+     */
+    public GrantResult grantForPaidOrder(Long appId, String orderNo) {
+        if (appId == null || !StringUtils.hasText(orderNo)) {
+            throw new BusinessException(ApiErrorCode.MEMBERSHIP_GRANT_SOURCE_INVALID);
+        }
+        PaidOrderSnapshotSource.PaidOrderSnapshot snapshot = paidOrderSnapshotSource.findConfirmed(appId, orderNo)
+                .orElseThrow(() -> new BusinessException(ApiErrorCode.PAYMENT_ORDER_NOT_CONFIRMED));
+        requireUserInApp(appId, snapshot.userId());
+        ensureEntitlementRowQuietly(appId, snapshot.userId());
+        return executeWithLockRetry(() -> {
+            try {
+                return self.grantForPaidOrderInTx(appId, orderNo);
+            } catch (DataIntegrityViolationException ex) {
+                log.info("Concurrent paid-order grant recovered appId={} orderNo={}", appId, orderNo);
+                return self.readIdempotentPaymentGrant(appId, snapshot.userId(), orderNo);
+            }
+        });
+    }
+
+    @Transactional
+    public GrantResult grantForPaidOrderInTx(Long appId, String orderNo) {
+        PaidOrderSnapshotSource.PaidOrderSnapshot snapshot = paidOrderSnapshotSource.findConfirmed(appId, orderNo)
+                .orElseThrow(() -> new BusinessException(ApiErrorCode.PAYMENT_ORDER_NOT_CONFIRMED));
+        Long userId = snapshot.userId();
+
+        lockEntitlement(appId, userId);
+
+        var existing = grantRepository.findByAppIdAndSourceTypeAndSourceRef(appId, GrantSourceType.PAYMENT, orderNo);
+        if (existing.isPresent()) {
+            log.info("Idempotent paid-order grant hit appId={} orderNo={}", appId, orderNo);
+            return new GrantResult(existing.get().getId(), false, statusInTx(appId, userId));
+        }
+
+        // The plan row must still exist and belong to this app; status and price are deliberately ignored.
+        MembershipPlanEntity plan = planRepository.findById(snapshot.planId())
+                .filter(p -> p.getAppId().equals(appId) && p.getPlanCode() == snapshot.planCode())
+                .orElseThrow(() -> new BusinessException(ApiErrorCode.INTERNAL_ERROR, "Order plan snapshot mismatch"));
+
+        MembershipGrantEntity grant = MembershipGrantEntity.createFromPaidOrderSnapshot(
+                appId,
+                userId,
+                plan.getId(),
+                snapshot.planCode(),
+                snapshot.durationDays(),
+                snapshot.lifetime(),
+                orderNo,
+                clock.instant());
+        grantRepository.saveAndFlush(grant);
+        refreshEntitlement(appId, userId);
+        log.info("Membership granted from paid order appId={} userId={} plan={} orderNo={} grantId={}",
+                appId, userId, snapshot.planCode(), orderNo, grant.getId());
+        return new GrantResult(grant.getId(), true, statusInTx(appId, userId));
+    }
+
+    @Transactional(readOnly = true)
+    public GrantResult readIdempotentPaymentGrant(Long appId, Long userId, String orderNo) {
+        MembershipGrantEntity grant = grantRepository
+                .findByAppIdAndSourceTypeAndSourceRef(appId, GrantSourceType.PAYMENT, orderNo)
+                .orElseThrow(() -> new BusinessException(ApiErrorCode.INTERNAL_ERROR));
+        return new GrantResult(grant.getId(), false, statusInTx(appId, userId));
     }
 
     @Transactional(readOnly = true)

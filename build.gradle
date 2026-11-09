@@ -39,38 +39,68 @@ tasks.named('test') {
     useJUnitPlatform()
 }
 
-// Isolation fixtures (e.g. I3.4.3-D1) live outside src/main so they never ship in bootJar.
+// Isolation fixtures (I3.4.3-D1 data, FakePaymentProvider, s32it profile, fake payment control)
+// live in src/fixture so they never ship in bootJar. Tests reuse them via the fixture output.
 sourceSets {
     fixture {
         java.srcDir 'src/fixture/java'
         compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
         runtimeClasspath += output + sourceSets.main.output + sourceSets.main.runtimeClasspath
     }
+    test {
+        compileClasspath += sourceSets.fixture.output
+        runtimeClasspath += sourceSets.fixture.output
+    }
 }
 
 tasks.register('i343d1Fixture', JavaExec) {
     group = 'fixtures'
-    description = 'I3.4.3-D1 fixture: -Pi343d1Command=seed|clean (s32it + aurora_app_test only).'
+    description = 'I3.4.3-D1 fixture: -Pi343d1Command=seed|sessions|new-pay-accounts|clean [-Pi343d1Count=3] (s32it + aurora_app_test only).'
     classpath = sourceSets.fixture.runtimeClasspath
     mainClass = 'com.aurora.appserver.AuroraAppServerApplication'
     workingDir = projectDir
     def command = project.findProperty('i343d1Command') ?: ''
-    args '--spring.profiles.active=s32it', '--server.port=0', "--i343d1.command=${command}"
+    def count = project.findProperty('i343d1Count') ?: '3'
+    args '--spring.profiles.active=s32it', '--server.port=0', '--aurora.payment.jobs.enabled=false',
+            "--i343d1.command=${command}", "--i343d1.count=${count}"
+}
+
+// Standing isolated server on :8081 (s32it + aurora_app_test + FakePaymentProvider).
+// Optional -Ps32itExtraArgs="--aurora.payment.order-ttl=2m ..." for short-lived verification runs.
+tasks.register('s32itServer', JavaExec) {
+    group = 'fixtures'
+    description = 'Isolated 8081 server with fixture classpath (never the production jar).'
+    classpath = sourceSets.fixture.runtimeClasspath
+    mainClass = 'com.aurora.appserver.AuroraAppServerApplication'
+    workingDir = projectDir
+    def extra = (project.findProperty('s32itExtraArgs') ?: '').toString().trim()
+    args(['--spring.profiles.active=s32it'] + (extra ? extra.split(/\s+/).toList() : []))
 }
 
 tasks.register('verifyBootJarExcludesFixtures') {
     group = 'verification'
-    description = 'Fails if test fixtures or fake payment providers are packaged in the production jar.'
+    description = 'Fails if fixtures, fake payment code, test entry points or test secrets are in the production jar.'
     dependsOn tasks.named('bootJar')
     doLast {
         def jarFile = tasks.named('bootJar').get().archiveFile.get().asFile
-        def offenders = new java.util.zip.ZipFile(jarFile).withCloseable { zip ->
-            zip.entries().collect { it.name }.findAll {
-                it.contains('com/aurora/appserver/fixture/') || it.contains('FakePaymentProvider')
+        def forbiddenNames = ['com/aurora/appserver/fixture/', 'FakePaymentProvider', 'FixturePaymentControl',
+                              'StubYusenHttpTransport', 'application-s32it', 'application-test']
+        def forbiddenContent = ['fake-key-for-tests-only', 'fictional-merchant-key', 'test-trial-hmac-secret',
+                                's32it-placeholder-secret', '/internal/fixture', 'i343d1']
+        def offenders = []
+        new java.util.zip.ZipFile(jarFile).withCloseable { zip ->
+            zip.entries().each { entry ->
+                if (forbiddenNames.any { entry.name.contains(it) }) {
+                    offenders << entry.name
+                }
+                if (!entry.isDirectory() && entry.name.startsWith('BOOT-INF/classes/')) {
+                    def text = zip.getInputStream(entry).withCloseable { new String(it.readAllBytes(), 'ISO-8859-1') }
+                    forbiddenContent.findAll { text.contains(it) }.each { offenders << "${entry.name} contains '${it}'" }
+                }
             }
         }
         if (!offenders.isEmpty()) {
-            throw new GradleException("Production jar contains fixtures: ${offenders}")
+            throw new GradleException("Production jar contains fixtures or test secrets: ${offenders}")
         }
         logger.lifecycle("bootJar fixture check OK: ${jarFile.name}")
     }
