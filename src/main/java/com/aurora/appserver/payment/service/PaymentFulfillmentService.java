@@ -1,5 +1,7 @@
 package com.aurora.appserver.payment.service;
 
+import com.aurora.appserver.payment.alert.PaymentAlertService;
+import com.aurora.appserver.payment.alert.PaymentAlertType;
 import com.aurora.appserver.common.exception.BusinessException;
 import com.aurora.appserver.payment.config.PaymentProperties;
 import com.aurora.appserver.payment.domain.PaymentOrderEntity;
@@ -45,6 +47,7 @@ public class PaymentFulfillmentService {
     private final MembershipFulfillmentPort fulfillmentPort;
     private final PaymentProperties properties;
     private final Clock clock;
+    private final PaymentAlertService alertService;
     private final PaymentFulfillmentService self;
 
     public PaymentFulfillmentService(
@@ -53,6 +56,7 @@ public class PaymentFulfillmentService {
             MembershipFulfillmentPort fulfillmentPort,
             PaymentProperties properties,
             Clock clock,
+            PaymentAlertService alertService,
             @Lazy PaymentFulfillmentService self
     ) {
         this.orderRepository = orderRepository;
@@ -60,6 +64,7 @@ public class PaymentFulfillmentService {
         this.fulfillmentPort = fulfillmentPort;
         this.properties = properties;
         this.clock = clock;
+        this.alertService = alertService;
         this.self = self;
     }
 
@@ -116,8 +121,8 @@ public class PaymentFulfillmentService {
         order.recordFulfillFailure(retryAt, error);
         orderRepository.save(order);
         if (attempts >= properties.getJobs().getFulfillAlertAttempts()) {
-            log.error("ALERT payment fulfillment still failing orderNo={} attempts={} error={}",
-                    order.getOrderNo(), attempts, error);
+            alertService.alert(PaymentAlertType.FULFILLMENT_FAILING, order.getOrderNo(),
+                    "attempts=" + attempts + " error=" + error);
         } else {
             log.warn("Payment fulfillment failed orderNo={} attempts={} retryAt={} error={}",
                     order.getOrderNo(), attempts, retryAt, error);

@@ -1,0 +1,27 @@
+# paystaging: isolated REAL Yusen integration environment (see docs/payment/paystaging-deployment.md).
+# Every credential and host comes from environment variables; nothing secret is stored here.
+# PaystagingIsolationRules refuses to start unless: database aurora_app_paystaging, provider YUSEN,
+# environment STAGING, port not 8080/8081, complete https Yusen settings, no s32it/test/local profile.
+server:
+  port: ${PAYSTAGING_PORT:8082}
+
+spring:
+  datasource:
+    # Database name is fixed on purpose; only host/port/credentials vary per deployment.
+    url: jdbc:mysql://${PAYSTAGING_DB_HOST}:${PAYSTAGING_DB_PORT:3306}/aurora_app_paystaging?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&connectionTimeZone=UTC&sslMode=${PAYSTAGING_DB_SSL_MODE:REQUIRED}
+    username: ${PAYSTAGING_DB_USERNAME}
+    password: ${PAYSTAGING_DB_PASSWORD}
+
+aurora:
+  payment:
+    provider: YUSEN
+    environment: STAGING
+    # Off until Yusen confirms re-submitting the same out_trade_no is accepted (I3.5.5-A, A16).
+    reuse-pending-orders: ${PAYMENT_REUSE_PENDING_ORDERS:false}
+    jobs:
+      enabled: ${PAYMENT_JOBS_ENABLED:true}
+    alert:
+      webhook-url: ${PAYMENT_ALERT_WEBHOOK_URL:}
+    yusen:
+      # Real outbound calls stay off until explicitly enabled for an approved integration window.
+      network-enabled: ${PAYMENT_NETWORK_ENABLED:false}

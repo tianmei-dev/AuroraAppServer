@@ -77,6 +77,10 @@ aurora:
     reuse-min-remaining: 5m
     order-no-prefix: CV
     notify-confirm-wait: 3s
+    reuse-pending-orders: ${PAYMENT_REUSE_PENDING_ORDERS:true}
+    alert:
+      # Empty = no outbound alert; structured PAYMENT_ALERT log lines are always written.
+      webhook-url: ${PAYMENT_ALERT_WEBHOOK_URL:}
     jobs:
       enabled: ${PAYMENT_JOBS_ENABLED:true}
       initial-delay-ms: 5000
@@ -90,13 +94,14 @@ aurora:
       inconclusive-min-attempts: 3
       fulfill-lease: 2m
     yusen:
-      gateway-base-url: ${YUSEN_GATEWAY_BASE_URL:}
+      # Canonical names: YUSEN_GATEWAY_URL / PAYMENT_NETWORK_ENABLED (older names still accepted).
+      gateway-base-url: ${YUSEN_GATEWAY_URL:${YUSEN_GATEWAY_BASE_URL:}}
       pid: ${YUSEN_PID:}
       key: ${YUSEN_KEY:}
       notify-url: ${YUSEN_NOTIFY_URL:}
       return-url: ${YUSEN_RETURN_URL:}
       # Outbound calls to the real gateway are refused unless explicitly enabled.
-      network-enabled: ${YUSEN_NETWORK_ENABLED:false}
+      network-enabled: ${PAYMENT_NETWORK_ENABLED:${YUSEN_NETWORK_ENABLED:false}}
       connect-timeout: 3s
       request-timeout: 5s
 

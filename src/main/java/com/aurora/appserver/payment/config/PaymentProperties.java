@@ -22,8 +22,14 @@ public class PaymentProperties {
     private String orderNoPrefix = "CV";
     /** Max time the notify endpoint waits for its triggered query before acknowledging. */
     private Duration notifyConfirmWait = Duration.ofSeconds(3);
+    /**
+     * Reuse an unexpired pending order of the same user and plan for a new clientRequestId.
+     * clientRequestId idempotency is independent of this switch.
+     */
+    private boolean reusePendingOrders = true;
     private final Yusen yusen = new Yusen();
     private final Jobs jobs = new Jobs();
+    private final Alert alert = new Alert();
 
     public String getProvider() {
         return provider;
@@ -73,12 +79,65 @@ public class PaymentProperties {
         this.notifyConfirmWait = notifyConfirmWait;
     }
 
+    public boolean isReusePendingOrders() {
+        return reusePendingOrders;
+    }
+
+    public void setReusePendingOrders(boolean reusePendingOrders) {
+        this.reusePendingOrders = reusePendingOrders;
+    }
+
     public Yusen getYusen() {
         return yusen;
     }
 
     public Jobs getJobs() {
         return jobs;
+    }
+
+    public Alert getAlert() {
+        return alert;
+    }
+
+    /** Minimal outbound alerting. Nothing is sent unless an https webhook URL is configured. */
+    public static class Alert {
+        private String webhookUrl = "";
+        private Duration timeout = Duration.ofSeconds(3);
+        /** Same (type, orderNo) is pushed at most once per window; logs are never suppressed. */
+        private Duration dedupeWindow = Duration.ofMinutes(10);
+
+        public String getWebhookUrl() {
+            return webhookUrl;
+        }
+
+        public void setWebhookUrl(String webhookUrl) {
+            this.webhookUrl = webhookUrl == null ? "" : webhookUrl.trim();
+        }
+
+        public Duration getTimeout() {
+            return timeout;
+        }
+
+        public void setTimeout(Duration timeout) {
+            this.timeout = timeout;
+        }
+
+        public Duration getDedupeWindow() {
+            return dedupeWindow;
+        }
+
+        public void setDedupeWindow(Duration dedupeWindow) {
+            this.dedupeWindow = dedupeWindow;
+        }
+
+        public boolean isWebhookConfigured() {
+            return !webhookUrl.isEmpty();
+        }
+
+        @Override
+        public String toString() {
+            return "Alert{webhook=" + (isWebhookConfigured() ? "<configured>" : "(none)") + "}";
+        }
     }
 
     /** Background confirmation / fulfillment / expiry settings. */

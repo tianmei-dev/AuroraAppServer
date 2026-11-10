@@ -1,5 +1,7 @@
 package com.aurora.appserver.payment.service;
 
+import com.aurora.appserver.payment.alert.PaymentAlertService;
+import com.aurora.appserver.payment.alert.PaymentAlertType;
 import com.aurora.appserver.payment.config.PaymentProperties;
 import com.aurora.appserver.payment.domain.PaymentAnomaly;
 import com.aurora.appserver.payment.domain.PaymentOrderEntity;
@@ -54,6 +56,7 @@ public class PaymentConfirmationService {
     private final PaymentFulfillmentService fulfillmentService;
     private final PaymentProperties properties;
     private final Clock clock;
+    private final PaymentAlertService alertService;
     private final PaymentConfirmationService self;
 
     public PaymentConfirmationService(
@@ -65,6 +68,7 @@ public class PaymentConfirmationService {
             PaymentFulfillmentService fulfillmentService,
             PaymentProperties properties,
             Clock clock,
+            PaymentAlertService alertService,
             @Lazy PaymentConfirmationService self
     ) {
         this.orderRepository = orderRepository;
@@ -75,6 +79,7 @@ public class PaymentConfirmationService {
         this.fulfillmentService = fulfillmentService;
         this.properties = properties;
         this.clock = clock;
+        this.alertService = alertService;
         this.self = self;
     }
 
@@ -127,8 +132,8 @@ public class PaymentConfirmationService {
         PaymentAnomaly mismatch = validate(order, result);
         if (mismatch != null) {
             self.markAnomalyInTx(order.getId(), mismatch, trigger);
-            log.error("ALERT payment query mismatch orderNo={} anomaly={} – membership NOT granted",
-                    order.getOrderNo(), mismatch);
+            alertService.alert(PaymentAlertType.QUERY_MISMATCH, order.getOrderNo(),
+                    "anomaly=" + mismatch + " membership not granted");
             return Outcome.MISMATCH;
         }
         boolean transitioned;
@@ -136,7 +141,8 @@ public class PaymentConfirmationService {
             transitioned = self.applyPaidInTx(order.getId(), result, trigger);
         } catch (DataIntegrityViolationException ex) {
             self.markAnomalyInTx(order.getId(), PaymentAnomaly.QUERY_ORDER_MISMATCH, trigger);
-            log.error("ALERT provider trade number conflict orderNo={} – membership NOT granted", order.getOrderNo());
+            alertService.alert(PaymentAlertType.PROVIDER_TRADE_NO_CONFLICT, order.getOrderNo(),
+                    "membership not granted");
             return Outcome.MISMATCH;
         }
         fulfillmentService.fulfill(order.getId());
@@ -210,7 +216,7 @@ public class PaymentConfirmationService {
                     orderId, from, PaymentOrderStatus.PAID, trigger,
                     order.isLatePaid() ? "late_payment" : null));
             if (order.isLatePaid()) {
-                log.warn("ALERT late payment confirmed after local expiry orderNo={}", order.getOrderNo());
+                alertService.alert(PaymentAlertType.LATE_PAYMENT, order.getOrderNo(), "trigger=" + trigger);
             } else {
                 log.info("Payment confirmed orderNo={} trigger={}", order.getOrderNo(), trigger);
             }

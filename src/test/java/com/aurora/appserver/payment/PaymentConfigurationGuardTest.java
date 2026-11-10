@@ -29,6 +29,62 @@ class PaymentConfigurationGuardTest {
         p.getYusen().setReturnUrl(scheme + "://api.example.test/return");
     }
 
+    // ---------------------------------------------------------------- I3.5.5-B1 additions
+
+    @Test
+    void t04_stagingRejectsFakeBeanAndFakeSelection() {
+        PaymentProperties none = props("NONE", PaymentEnvironment.STAGING);
+        assertThatThrownBy(() -> PaymentConfigurationGuard.validate(
+                none, List.of(new YusenPaymentProvider(none), new FakePaymentProvider())))
+                .hasMessageContaining("FAKE payment provider must not be present in STAGING");
+
+        PaymentProperties fake = props("FAKE", PaymentEnvironment.STAGING);
+        assertThatThrownBy(() -> PaymentConfigurationGuard.validate(fake, List.of(new YusenPaymentProvider(fake))))
+                .hasMessageContaining("STAGING payment provider must be YUSEN");
+    }
+
+    @Test
+    void t06_yusenRequiresHttpsInEveryEnvironment() {
+        for (PaymentEnvironment env : PaymentEnvironment.values()) {
+            PaymentProperties http = props("YUSEN", env);
+            configureYusen(http, "http");
+            assertThatThrownBy(() -> PaymentConfigurationGuard.validate(http, List.of(new YusenPaymentProvider(http))))
+                    .as(env.name())
+                    .hasMessageContaining("must use https");
+        }
+        PaymentProperties staging = props("YUSEN", PaymentEnvironment.STAGING);
+        configureYusen(staging, "https");
+        assertThatCode(() -> PaymentConfigurationGuard.validate(staging, List.of(new YusenPaymentProvider(staging))))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void t07_stagingYusenWithoutMerchantSettingsCannotStart() {
+        PaymentProperties p = props("YUSEN", PaymentEnvironment.STAGING);
+        assertThatThrownBy(() -> PaymentConfigurationGuard.validate(p, List.of(new YusenPaymentProvider(p))))
+                .hasMessageContaining("not fully configured");
+    }
+
+    @Test
+    void t08_networkAccessOnlyForConfiguredYusenOutsideTest() {
+        PaymentProperties test = props("FAKE", PaymentEnvironment.TEST);
+        test.getYusen().setNetworkEnabled(true);
+        assertThatThrownBy(() -> PaymentConfigurationGuard.validate(
+                test, List.of(new YusenPaymentProvider(test), new FakePaymentProvider())))
+                .hasMessageContaining("must not be enabled in TEST");
+
+        PaymentProperties none = props("NONE", PaymentEnvironment.STAGING);
+        none.getYusen().setNetworkEnabled(true);
+        assertThatThrownBy(() -> PaymentConfigurationGuard.validate(none, List.of(new YusenPaymentProvider(none))))
+                .hasMessageContaining("requires the YUSEN provider");
+
+        PaymentProperties staging = props("YUSEN", PaymentEnvironment.STAGING);
+        configureYusen(staging, "https");
+        staging.getYusen().setNetworkEnabled(true);
+        assertThatCode(() -> PaymentConfigurationGuard.validate(staging, List.of(new YusenPaymentProvider(staging))))
+                .doesNotThrowAnyException();
+    }
+
     @Test
     void productionRejectsFakeProviderBeanEvenWhenNotSelected() {
         PaymentProperties p = props("NONE", PaymentEnvironment.PRODUCTION);

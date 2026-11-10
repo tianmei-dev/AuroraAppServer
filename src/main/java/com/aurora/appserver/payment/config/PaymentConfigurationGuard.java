@@ -42,12 +42,20 @@ public class PaymentConfigurationGuard implements InitializingBean {
             throw new IllegalStateException("aurora.payment.environment must be set");
         }
 
-        if (environment == PaymentEnvironment.PRODUCTION
+        if (environment != PaymentEnvironment.TEST
                 && providers.stream().anyMatch(p -> p.code() == PaymentProviderCode.FAKE)) {
-            throw new IllegalStateException("FAKE payment provider must not be present in PRODUCTION");
+            throw new IllegalStateException("FAKE payment provider must not be present in " + environment);
+        }
+
+        boolean networkEnabled = properties.getYusen().isNetworkEnabled();
+        if (networkEnabled && environment == PaymentEnvironment.TEST) {
+            throw new IllegalStateException("Real payment network access must not be enabled in TEST");
         }
 
         if (PaymentProperties.PROVIDER_NONE.equals(selected)) {
+            if (networkEnabled) {
+                throw new IllegalStateException("Payment network access requires the YUSEN provider");
+            }
             return;
         }
 
@@ -58,8 +66,11 @@ public class PaymentConfigurationGuard implements InitializingBean {
             throw new IllegalStateException("Unknown aurora.payment.provider: " + selected);
         }
 
-        if (environment == PaymentEnvironment.PRODUCTION && code != PaymentProviderCode.YUSEN) {
-            throw new IllegalStateException("PRODUCTION payment provider must be YUSEN");
+        if (environment != PaymentEnvironment.TEST && code != PaymentProviderCode.YUSEN) {
+            throw new IllegalStateException(environment + " payment provider must be YUSEN");
+        }
+        if (networkEnabled && code != PaymentProviderCode.YUSEN) {
+            throw new IllegalStateException("Payment network access requires the YUSEN provider");
         }
 
         Optional<PaymentProvider> provider = providers.stream().filter(p -> p.code() == code).findFirst();
@@ -70,7 +81,8 @@ public class PaymentConfigurationGuard implements InitializingBean {
             throw new IllegalStateException("Selected payment provider is not fully configured: " + code);
         }
 
-        if (environment == PaymentEnvironment.PRODUCTION) {
+        // Real Yusen settings must be https in every environment (not only PRODUCTION).
+        if (code == PaymentProviderCode.YUSEN) {
             PaymentProperties.Yusen yusen = properties.getYusen();
             requireHttps("gateway-base-url", yusen.getGatewayBaseUrl());
             requireHttps("notify-url", yusen.getNotifyUrl());
@@ -80,7 +92,7 @@ public class PaymentConfigurationGuard implements InitializingBean {
 
     private static void requireHttps(String name, String url) {
         if (url == null || !url.trim().toLowerCase().startsWith("https://")) {
-            throw new IllegalStateException("PRODUCTION Yusen " + name + " must use https");
+            throw new IllegalStateException("Yusen " + name + " must use https");
         }
     }
 }

@@ -1,5 +1,7 @@
 package com.aurora.appserver.payment.service;
 
+import com.aurora.appserver.payment.alert.PaymentAlertService;
+import com.aurora.appserver.payment.alert.PaymentAlertType;
 import com.aurora.appserver.payment.config.PaymentProperties;
 import com.aurora.appserver.payment.domain.PaymentAnomaly;
 import com.aurora.appserver.payment.domain.PaymentNotificationEntity;
@@ -54,6 +56,7 @@ public class PaymentNotificationService {
     private final PaymentConfirmationService confirmationService;
     private final PaymentProperties properties;
     private final Clock clock;
+    private final PaymentAlertService alertService;
     private final ThreadPoolExecutor confirmExecutor;
 
     public PaymentNotificationService(
@@ -62,7 +65,8 @@ public class PaymentNotificationService {
             PaymentOrderRepository orderRepository,
             PaymentConfirmationService confirmationService,
             PaymentProperties properties,
-            Clock clock
+            Clock clock,
+            PaymentAlertService alertService
     ) {
         this.providerRegistry = providerRegistry;
         this.notificationRepository = notificationRepository;
@@ -70,6 +74,7 @@ public class PaymentNotificationService {
         this.confirmationService = confirmationService;
         this.properties = properties;
         this.clock = clock;
+        this.alertService = alertService;
         AtomicInteger seq = new AtomicInteger();
         this.confirmExecutor = new ThreadPoolExecutor(
                 2, 4, 60, TimeUnit.SECONDS, new ArrayBlockingQueue<>(100),
@@ -103,8 +108,8 @@ public class PaymentNotificationService {
             boolean pidProblem = ex.getReason() == PaymentNotificationRejectedException.Reason.PID_MISMATCH;
             record(code, params, null, !pidProblem, false, dedupeKey,
                     pidProblem ? Result.REJECTED_PID : Result.REJECTED_SIGN, remoteIp);
-            log.warn("ALERT payment notification rejected provider={} reason={} orderNo={} ip={}",
-                    code, ex.getReason(), params.get("out_trade_no"), remoteIp);
+            alertService.alert(PaymentAlertType.NOTIFY_REJECTED, params.get("out_trade_no"),
+                    "provider=" + code + " reason=" + ex.getReason() + " ip=" + remoteIp);
             return provider.notificationReject();
         }
 
@@ -124,8 +129,7 @@ public class PaymentNotificationService {
                 .filter(o -> o.getProvider() == code);
         if (maybeOrder.isEmpty()) {
             record(code, params, verified, true, true, dedupeKey, Result.ORDER_NOT_FOUND, remoteIp);
-            log.error("ALERT verified payment notification for unknown order provider={} orderNo={}",
-                    code, verified.orderNo());
+            alertService.alert(PaymentAlertType.NOTIFY_UNKNOWN_ORDER, verified.orderNo(), "provider=" + code);
             return provider.notificationAck();
         }
         PaymentOrderEntity order = maybeOrder.get();
@@ -134,15 +138,15 @@ public class PaymentNotificationService {
             record(code, params, verified, false, true, dedupeKey, Result.REJECTED_PID, remoteIp);
             confirmationService.markAnomalyInTx(order.getId(), PaymentAnomaly.NOTIFY_MERCHANT_MISMATCH,
                     PaymentOrderTrigger.NOTIFY);
-            log.error("ALERT notification merchant differs from order merchant orderNo={}", order.getOrderNo());
+            alertService.alert(PaymentAlertType.NOTIFY_MERCHANT_MISMATCH, order.getOrderNo(), "provider=" + code);
             return provider.notificationAck();
         }
         if (verified.amountFen().isEmpty() || verified.amountFen().get() != order.getAmountFen()) {
             record(code, params, verified, true, true, dedupeKey, Result.AMOUNT_MISMATCH, remoteIp);
             confirmationService.markAnomalyInTx(order.getId(), PaymentAnomaly.NOTIFY_AMOUNT_MISMATCH,
                     PaymentOrderTrigger.NOTIFY);
-            log.error("ALERT notification amount mismatch orderNo={} amountRaw={}",
-                    order.getOrderNo(), verified.amountRaw());
+            alertService.alert(PaymentAlertType.NOTIFY_AMOUNT_MISMATCH, order.getOrderNo(),
+                    "amountRaw=" + verified.amountRaw() + " expectedFen=" + order.getAmountFen());
             return provider.notificationAck();
         }
 

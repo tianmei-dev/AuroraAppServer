@@ -1,5 +1,7 @@
 package com.aurora.appserver.payment.service;
 
+import com.aurora.appserver.payment.alert.PaymentAlertService;
+import com.aurora.appserver.payment.alert.PaymentAlertType;
 import com.aurora.appserver.auth.repository.UserRepository;
 import com.aurora.appserver.common.api.ApiErrorCode;
 import com.aurora.appserver.common.exception.BusinessException;
@@ -57,6 +59,7 @@ public class PaymentOrderService {
     private final OrderNoGenerator orderNoGenerator;
     private final PaymentProperties properties;
     private final Clock clock;
+    private final PaymentAlertService alertService;
     private final PaymentOrderService self;
 
     public PaymentOrderService(
@@ -70,6 +73,7 @@ public class PaymentOrderService {
             OrderNoGenerator orderNoGenerator,
             PaymentProperties properties,
             Clock clock,
+            PaymentAlertService alertService,
             @Lazy PaymentOrderService self
     ) {
         this.orderRepository = orderRepository;
@@ -82,6 +86,7 @@ public class PaymentOrderService {
         this.orderNoGenerator = orderNoGenerator;
         this.properties = properties;
         this.clock = clock;
+        this.alertService = alertService;
         this.self = self;
     }
 
@@ -162,7 +167,9 @@ public class PaymentOrderService {
         }
 
         Instant now = clock.instant();
-        Optional<PaymentOrderEntity> reusable = orderRepository
+        Optional<PaymentOrderEntity> reusable = !properties.isReusePendingOrders()
+                ? Optional.empty()
+                : orderRepository
                 .findFirstByAppIdAndUserIdAndPlanCodeAndStatusAndProviderAndEnvironmentAndExpiresAtAfterOrderByCreatedAtDesc(
                         appId,
                         userId,
@@ -229,8 +236,8 @@ public class PaymentOrderService {
                             order.getOrderNo(), order.getAmountFen(), order.getPlanDisplayName())))
                     .orElse(null);
             if (link != null && !PaymentLinkPolicy.allowed(order.getEnvironment(), link)) {
-                log.error("ALERT payment link kind={} not allowed in environment={} orderNo={}; withheld",
-                        link.kind(), order.getEnvironment(), order.getOrderNo());
+                alertService.alert(PaymentAlertType.PAYMENT_LINK_WITHHELD, order.getOrderNo(),
+                        "kind=" + link.kind() + " env=" + order.getEnvironment());
                 link = null;
             }
         }
