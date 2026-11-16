@@ -1,4 +1,4 @@
-# No default profile: start with exactly one of local | s32it | paystaging | test
+# No default profile: start with exactly one of local | s32it | paystaging | prod | test
 # (SPRING_PROFILES_ACTIVE or --spring.profiles.active). bootRun defaults to local.
 spring:
   application:

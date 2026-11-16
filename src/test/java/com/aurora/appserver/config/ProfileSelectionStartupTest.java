@@ -39,7 +39,9 @@ class ProfileSelectionStartupTest {
                 "--aurora.payment.jobs.enabled=false",
                 "--spring.datasource.hikari.connection-timeout=2000"));
         args.addAll(List.of(extraArgs));
-        if (args.stream().noneMatch(a -> a.startsWith("--spring.datasource.url=") || a.startsWith("--PAYSTAGING_DB_"))) {
+        if (args.stream().noneMatch(a -> a.startsWith("--spring.datasource.url=")
+                || a.startsWith("--PAYSTAGING_DB_")
+                || a.startsWith("--PROD_DB_"))) {
             args.add("--spring.datasource.url=" + UNREACHABLE_DEV_DB);
         }
         SpringApplication app = new SpringApplication(AuroraAppServerApplication.class);
@@ -93,7 +95,8 @@ class ProfileSelectionStartupTest {
     @Test
     void s02_misspelledProfileIsRefused() {
         assertRefusedBeforeContext(launch("--spring.profiles.active=PAYSTAGING"), "unknown profile 'PAYSTAGING'");
-        assertRefusedBeforeContext(launch("--spring.profiles.active=prod"), "unknown profile 'prod'");
+        assertRefusedBeforeContext(launch("--spring.profiles.active=production"), "unknown profile 'production'");
+        assertRefusedBeforeContext(launch("--spring.profiles.active=PROD"), "unknown profile 'PROD'");
     }
 
     // A3-S03 ------------------------------------------------------------------------------------
@@ -121,6 +124,35 @@ class ProfileSelectionStartupTest {
     void s03_paystagingWithDevelopmentDatabaseIsStillRefusedByItsOwnGuard() {
         Throwable thrown = launch("--spring.profiles.active=paystaging", "--spring.datasource.url=" + UNREACHABLE_DEV_DB);
         assertThat(thrown).hasMessageContaining("Refusing to start profile 'paystaging': database aurora_app belongs to another environment");
+    }
+
+    @Test
+    void s03_validProdPassesProfileAndConfigurationGuardsThenStopsAtConnectedDatabaseCheck() {
+        Throwable thrown = launch(
+                "--spring.profiles.active=prod",
+                "--PROD_DB_HOST=127.0.0.1",
+                "--PROD_DB_PORT=1",
+                "--PROD_DB_USERNAME=prod_app",
+                "--PROD_DB_PASSWORD=fictional-db-password",
+                "--YUSEN_PID=1001",
+                "--YUSEN_KEY=fictional-key-for-unit-tests",
+                "--YUSEN_GATEWAY_URL=https://ivo.hzlugun.top",
+                "--YUSEN_NOTIFY_URL=https://aurora-api.appforfun.top/api/v1/payment/notify/yusen",
+                "--YUSEN_RETURN_URL=https://aurora-api.appforfun.top/api/v1/payment/return/yusen");
+        String trace = trace(thrown);
+        assertThat(trace).doesNotContain("Refusing to start:");
+        assertThat(trace).contains("SpringApplication.refreshContext");
+        assertThat(trace).contains("Refusing to start profile 'prod': cannot verify connected database");
+        assertThat(trace).doesNotContain("fictional-key-for-unit-tests").doesNotContain("fictional-db-password");
+    }
+
+    @Test
+    void s03_prodWithPaystagingDatabaseIsRefusedByItsOwnGuard() {
+        Throwable thrown = launch(
+                "--spring.profiles.active=prod",
+                "--spring.datasource.url=jdbc:mysql://127.0.0.1:1/aurora_app_paystaging");
+        assertThat(thrown).hasMessageContaining(
+                "Refusing to start profile 'prod': database aurora_app_paystaging belongs to another environment");
     }
 
     // A3-S04 ------------------------------------------------------------------------------------

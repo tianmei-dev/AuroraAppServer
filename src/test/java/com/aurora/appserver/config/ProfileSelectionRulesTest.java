@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.aurora.appserver.config.isolation.PaystagingEnvironmentGuard;
+import com.aurora.appserver.config.isolation.ProdEnvironmentGuard;
 import com.aurora.appserver.config.isolation.ProfileSelectionGuard;
 import com.aurora.appserver.config.isolation.ProfileSelectionRules;
 import com.aurora.appserver.config.isolation.S32itEnvironmentGuard;
@@ -97,7 +98,7 @@ class ProfileSelectionRulesTest {
     // A3-U04 -------------------------------------------------------------------------------------
     @Test
     void u04_unknownOrMisspelledProfilesAreRefused() {
-        for (String wrong : new String[] {"PAYSTAGING", "Paystaging", "LOCAL", "prod", "production", "staging",
+        for (String wrong : new String[] {"PAYSTAGING", "Paystaging", "LOCAL", "production", "PROD", "staging",
                 "default", "paystaging-copy", "s32"}) {
             StandardEnvironment env = env(new String[] {wrong}, classpathSource("application-" + wrong + ".yml"));
             assertThatThrownBy(() -> guard(env)).as(wrong).hasMessageContaining("unknown profile '" + wrong + "'");
@@ -111,6 +112,7 @@ class ProfileSelectionRulesTest {
                 {"local", "paystaging"}, {"paystaging", "local"}, {"paystaging", "s32it"}, {"paystaging", "test"},
                 {"local", "s32it"}, {"s32it", "local"}, {"s32it", "test"}, {"test", "local"},
                 {"paystaging", "foo"}, {"local", "paystaging", "s32it"},
+                {"prod", "paystaging"}, {"prod", "local"}, {"paystaging", "prod"},
         };
         for (String[] combo : combos) {
             String[] sources = java.util.Arrays.stream(combo)
@@ -130,12 +132,15 @@ class ProfileSelectionRulesTest {
                                 org.apache.commons.logging.LogFactory.getLog(getClass())))
                 .stream().map(p -> p.getClass().getName()).toList();
         assertThat(registered).contains(ProfileSelectionGuard.class.getName(),
-                S32itEnvironmentGuard.class.getName(), PaystagingEnvironmentGuard.class.getName());
+                S32itEnvironmentGuard.class.getName(), PaystagingEnvironmentGuard.class.getName(),
+                ProdEnvironmentGuard.class.getName());
 
         int order = new ProfileSelectionGuard().getOrder();
         assertThat(order).isGreaterThan(ConfigDataEnvironmentPostProcessor.ORDER);
         assertThat(order).isLessThan(new S32itEnvironmentGuard().getOrder());
         assertThat(order).isLessThan(new PaystagingEnvironmentGuard().getOrder());
+        assertThat(order).isLessThan(new ProdEnvironmentGuard().getOrder());
         assertThat(new PaystagingEnvironmentGuard().getOrder()).isEqualTo(Ordered.LOWEST_PRECEDENCE);
+        assertThat(new ProdEnvironmentGuard().getOrder()).isEqualTo(Ordered.LOWEST_PRECEDENCE);
     }
 }

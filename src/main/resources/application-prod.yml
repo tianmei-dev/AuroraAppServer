@@ -1,0 +1,30 @@
+# prod: isolated PRODUCTION environment for aurora-api.appforfun.top (see deploy/B3-06).
+# Credentials come only from environment variables — never commit secrets.
+# ProdIsolationRules refuse to start unless: database aurora_app_prod, provider YUSEN,
+# environment PRODUCTION, port not 8080/8081, complete https Yusen settings (no .invalid /
+# private hosts), and no local/s32it/test/paystaging profile combination.
+# PAYMENT_NETWORK_ENABLED defaults to false: enabling real outbound pay requires a separate
+# approved window (plus Nginx order POST allow). Adding this profile does not open payments.
+server:
+  port: ${PROD_PORT:8082}
+  address: ${SERVER_ADDRESS:127.0.0.1}
+
+spring:
+  datasource:
+    # Database name is fixed on purpose; only host/port/credentials vary per deployment.
+    url: jdbc:mysql://${PROD_DB_HOST}:${PROD_DB_PORT:3306}/aurora_app_prod?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&connectionTimeZone=UTC&sslMode=${PROD_DB_SSL_MODE:REQUIRED}
+    username: ${PROD_DB_USERNAME}
+    password: ${PROD_DB_PASSWORD}
+
+aurora:
+  payment:
+    provider: YUSEN
+    environment: PRODUCTION
+    reuse-pending-orders: ${PAYMENT_REUSE_PENDING_ORDERS:false}
+    jobs:
+      enabled: ${PAYMENT_JOBS_ENABLED:true}
+    alert:
+      webhook-url: ${PAYMENT_ALERT_WEBHOOK_URL:}
+    yusen:
+      # Real outbound calls stay off until explicitly enabled for an approved payment window.
+      network-enabled: ${PAYMENT_NETWORK_ENABLED:false}

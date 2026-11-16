@@ -14,7 +14,7 @@ import org.springframework.core.env.PropertySource;
  */
 public final class ProfileSelectionRules {
 
-    public static final List<String> KNOWN_PROFILES = List.of("local", "s32it", "paystaging", "test");
+    public static final List<String> KNOWN_PROFILES = List.of("local", "s32it", "paystaging", "prod", "test");
 
     private ProfileSelectionRules() {
     }
