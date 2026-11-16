@@ -30,11 +30,19 @@ public class StubYusenHttpTransport implements YusenHttpTransport {
     private static final Map<String, Stub> STUBS = new ConcurrentHashMap<>();
     private static final Map<String, AtomicInteger> CALLS = new ConcurrentHashMap<>();
     private static final Map<String, Map<String, String>> LAST_QUERY = new ConcurrentHashMap<>();
+    /** When true, behaves like JdkYusenHttpTransport with network-enabled=false (no socket). */
+    private static volatile boolean networkDisabled;
 
     public static void reset() {
         STUBS.clear();
         CALLS.clear();
         LAST_QUERY.clear();
+        networkDisabled = false;
+    }
+
+    /** B3-04-A2: simulate PAYMENT_NETWORK_ENABLED=false without opening a real socket. */
+    public static void simulateNetworkDisabled() {
+        networkDisabled = true;
     }
 
     public static void respond(String orderNo, int status, String body) {
@@ -50,16 +58,25 @@ public class StubYusenHttpTransport implements YusenHttpTransport {
     }
 
     public static void paid(String orderNo, String money, String pid) {
-        respond(orderNo, 200, paidJson(orderNo, money, pid));
+        respond(orderNo, 200, paidJson(orderNo, money, pid, "Y" + orderNo));
+    }
+
+    /** B3-04-A2: force a shared provider trade_no across orders (unique-constraint conflict path). */
+    public static void paidWithTradeNo(String orderNo, String money, String pid, String tradeNo) {
+        respond(orderNo, 200, paidJson(orderNo, money, pid, tradeNo));
     }
 
     /** Field names and types follow doc "[API]查询单个订单". */
     public static String paidJson(String orderNo, String money, String pid) {
+        return paidJson(orderNo, money, pid, "Y" + orderNo);
+    }
+
+    public static String paidJson(String orderNo, String money, String pid, String tradeNo) {
         return """
-                {"code":1,"msg":"查询订单号成功！","trade_no":"Y%s","out_trade_no":"%s",\
+                {"code":1,"msg":"查询订单号成功！","trade_no":"%s","out_trade_no":"%s",\
                 "api_trade_no":"WX%s","type":"wxpay","pid":%s,"addtime":"2026-11-06 21:00:00",\
                 "endtime":"2026-11-06 21:01:00","name":"会员","money":"%s","status":1,"param":"","buyer":""}
-                """.formatted(orderNo, orderNo, orderNo, pid, money).trim();
+                """.formatted(tradeNo, orderNo, orderNo, pid, money).trim();
     }
 
     public static String unpaidJson(String orderNo, String money) {
@@ -84,6 +101,9 @@ public class StubYusenHttpTransport implements YusenHttpTransport {
         String orderNo = query.getOrDefault("out_trade_no", "");
         CALLS.computeIfAbsent(orderNo, k -> new AtomicInteger()).incrementAndGet();
         LAST_QUERY.put(orderNo, query);
+        if (networkDisabled) {
+            throw new IllegalStateException("Yusen network access is disabled");
+        }
         Stub stub = STUBS.get(orderNo);
         if (stub == null) {
             return new Response(200, unpaidJson(orderNo, "0.00"));
