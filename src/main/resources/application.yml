@@ -1,8 +1,8 @@
+# No default profile: start with exactly one of local | s32it | paystaging | test
+# (SPRING_PROFILES_ACTIVE or --spring.profiles.active). bootRun defaults to local.
 spring:
   application:
     name: aurora-app-server
-  profiles:
-    default: local
   datasource:
     url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:aurora_app}?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&connectionTimeZone=UTC
     username: ${DB_USERNAME:aurora}

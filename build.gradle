@@ -77,32 +77,126 @@ tasks.register('s32itServer', JavaExec) {
     args(['--spring.profiles.active=s32it'] + (extra ? extra.split(/\s+/).toList() : []))
 }
 
-tasks.register('verifyBootJarExcludesFixtures') {
-    group = 'verification'
-    description = 'Fails if fixtures, fake payment code, test entry points or test secrets are in the production jar.'
-    dependsOn tasks.named('bootJar')
-    doLast {
-        def jarFile = tasks.named('bootJar').get().archiveFile.get().asFile
-        def forbiddenNames = ['com/aurora/appserver/fixture/', 'FakePaymentProvider', 'FixturePaymentControl',
-                              'StubYusenHttpTransport', 'application-s32it', 'application-test']
-        def forbiddenContent = ['fake-key-for-tests-only', 'fictional-merchant-key', 'test-trial-hmac-secret',
-                                's32it-placeholder-secret', '/internal/fixture', 'i343d1']
-        def offenders = []
-        new java.util.zip.ZipFile(jarFile).withCloseable { zip ->
-            zip.entries().each { entry ->
-                if (forbiddenNames.any { entry.name.contains(it) }) {
-                    offenders << entry.name
-                }
-                if (!entry.isDirectory() && entry.name.startsWith('BOOT-INF/classes/')) {
-                    def text = zip.getInputStream(entry).withCloseable { new String(it.readAllBytes(), 'ISO-8859-1') }
-                    forbiddenContent.findAll { text.contains(it) }.each { offenders << "${entry.name} contains '${it}'" }
+// application.yml has no default profile and ProfileSelectionGuard refuses to start without one.
+// bootRun falls back to "local" through the process environment, the lowest-precedence way to set
+// it, so --spring.profiles.active, -Dspring.profiles.active and SPRING_APPLICATION_JSON still win.
+tasks.named('bootRun') {
+    doFirst {
+        def explicit = environment.containsKey('SPRING_PROFILES_ACTIVE') ||
+                (args ?: []).any { it.startsWith('--spring.profiles.active=') } ||
+                allJvmArgs.any { it.startsWith('-Dspring.profiles.active=') }
+        if (!explicit) {
+            environment('SPRING_PROFILES_ACTIVE', 'local')
+            logger.lifecycle('bootRun: no profile specified, defaulting to "local"')
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Production archive safety (B3-03-A2)
+//
+// Developer-local configuration (application-local.yml holds real dev credentials) stays in
+// src/main/resources so bootRun and IDE runs keep working: processResources is NOT filtered.
+// Only the packaged archives exclude it, and every archive is verified right after it is built.
+// ---------------------------------------------------------------------------------------------
+def localOnlyResourcePatterns = [
+        '**/application-local*',
+        '**/*.local.yml', '**/*.local.yaml', '**/*.local.properties', '**/*.local.json',
+        '**/.env', '**/.env.*',
+]
+
+// Returns violations (entry names / config key names only — never values).
+def productionArchiveViolations = { File archive ->
+    def forbiddenNames = [
+            ~/(^|\/)application-local[^\/]*$/,
+            ~/\.local\.(yml|yaml|properties|json)$/,
+            ~/(^|\/)\.env(\.[^\/]*)?$/,
+            ~/(^|\/)application-(s32it|test)[^\/]*$/,
+            ~/com\/aurora\/appserver\/fixture\//,
+            ~/FakePaymentProvider/,
+            ~/FixturePaymentControl/,
+            ~/StubYusenHttpTransport/,
+    ]
+    def forbiddenContent = ['fake-key-for-tests-only', 'fictional-merchant-key', 'test-trial-hmac-secret',
+                            's32it-placeholder-secret', '/internal/fixture', 'i343d1']
+    // Packaged config may reference secrets only through placeholders without literal defaults.
+    def secretKeyLine = ~/(?i)^\s*([\w.-]*(password|secret|token|key)[\w.-]*)\s*[:=]\s*(.*?)\s*$/
+    def allowedSecretValue = ~/^(|\$\{[A-Z0-9_]+:?\}|\$\{[A-Z0-9_]+:\$\{[A-Z0-9_]+:?\}\})$/
+    def violations = []
+    new java.util.zip.ZipFile(archive).withCloseable { zip ->
+        zip.entries().each { entry ->
+            def name = entry.name
+            if (forbiddenNames.any { name =~ it }) {
+                violations << "forbidden entry: ${name}"
+            }
+            if (entry.isDirectory()) {
+                return
+            }
+            boolean ownClassOrResource = name.startsWith('BOOT-INF/classes/') || !name.startsWith('BOOT-INF/')
+            if (!ownClassOrResource || name.startsWith('META-INF/MANIFEST') || name.startsWith('org/springframework/boot/loader/')) {
+                return
+            }
+            def text = zip.getInputStream(entry).withCloseable { new String(it.readAllBytes(), 'ISO-8859-1') }
+            forbiddenContent.findAll { text.contains(it) }.each { violations << "forbidden test marker in ${name}: '${it}'" }
+            if (name ==~ /.*\.(yml|yaml|properties)$/) {
+                text.readLines().eachWithIndex { line, idx ->
+                    def m = line =~ secretKeyLine
+                    if (m.matches() && !line.trim().startsWith('#')) {
+                        def value = m.group(3).replaceAll(/\s+#.*$/, '').replaceAll(/^["']|["']$/, '').trim()
+                        if (!(value ==~ allowedSecretValue)) {
+                            violations << "literal secret value in ${name}:${idx + 1} (key '${m.group(1)}')"
+                        }
+                    }
                 }
             }
         }
-        if (!offenders.isEmpty()) {
-            throw new GradleException("Production jar contains fixtures or test secrets: ${offenders}")
+    }
+    return violations
+}
+
+def verifyProductionArchive = { File archive, boolean deleteOnFailure ->
+    def violations = productionArchiveViolations(archive)
+    if (!violations.isEmpty()) {
+        if (deleteOnFailure) {
+            archive.delete()
         }
-        logger.lifecycle("bootJar fixture check OK: ${jarFile.name}")
+        throw new GradleException("Production archive safety check FAILED for ${archive.name}"
+                + (deleteOnFailure ? " (archive deleted)" : "") + ":\n  - " + violations.join("\n  - "))
+    }
+}
+
+tasks.named('bootJar') {
+    exclude(localOnlyResourcePatterns)
+    doLast {
+        def archive = archiveFile.get().asFile
+        verifyProductionArchive(archive, true)
+        logger.lifecycle("Production archive safety check OK: ${archive.name}")
+    }
+}
+
+tasks.named('jar') {
+    exclude(localOnlyResourcePatterns)
+    doLast {
+        def archive = archiveFile.get().asFile
+        verifyProductionArchive(archive, true)
+        logger.lifecycle("Production archive safety check OK: ${archive.name}")
+    }
+}
+
+// Explicit re-check (also wired into `check`). -PverifyArchive=<path> checks any archive without deleting it.
+tasks.register('verifyBootJarExcludesFixtures') {
+    group = 'verification'
+    description = 'Fails if local config, fixtures, fake payment code, test markers or literal secrets are in a production archive.'
+    dependsOn tasks.named('bootJar')
+    def projectDirFile = projectDir
+    def requestedArchive = providers.gradleProperty('verifyArchive')
+    def bootJarArchive = tasks.named('bootJar').flatMap { it.archiveFile }
+    doLast {
+        def archive = requestedArchive.isPresent()
+                ? new File(requestedArchive.get()).with { it.absolute ? it : new File(projectDirFile, it.path) }
+                : bootJarArchive.get().asFile
+        verifyProductionArchive(archive, false)
+        logger.lifecycle("bootJar fixture check OK: ${archive.name}")
     }
 }
 

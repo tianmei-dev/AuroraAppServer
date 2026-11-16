@@ -1,3 +1,4 @@
 org.springframework.boot.env.EnvironmentPostProcessor=\
+com.aurora.appserver.config.isolation.ProfileSelectionGuard,\
 com.aurora.appserver.config.isolation.S32itEnvironmentGuard,\
 com.aurora.appserver.config.isolation.PaystagingEnvironmentGuard
