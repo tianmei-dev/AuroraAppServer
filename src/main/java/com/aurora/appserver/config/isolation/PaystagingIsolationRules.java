@@ -58,6 +58,11 @@ public final class PaystagingIsolationRules {
             throw refusal("spring.datasource.url must target database " + REQUIRED_DATABASE
                     + " (configured: " + (database == null ? "<unparseable or missing>" : database) + ")");
         }
+        try {
+            JdbcUtcSessionRules.requireUtcSessionForced(url, "PAYSTAGING_DB_* / spring.datasource.url");
+        } catch (IllegalStateException ex) {
+            throw refusal(ex.getMessage());
+        }
 
         String provider = upper(property(environment, "aurora.payment.provider"), "NONE");
         if (!REQUIRED_PROVIDER.equals(provider)) {

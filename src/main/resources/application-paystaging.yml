@@ -8,7 +8,7 @@ server:
 spring:
   datasource:
     # Database name is fixed on purpose; only host/port/credentials vary per deployment.
-    url: jdbc:mysql://${PAYSTAGING_DB_HOST}:${PAYSTAGING_DB_PORT:3306}/aurora_app_paystaging?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&connectionTimeZone=UTC&sslMode=${PAYSTAGING_DB_SSL_MODE:REQUIRED}
+    url: jdbc:mysql://${PAYSTAGING_DB_HOST}:${PAYSTAGING_DB_PORT:3306}/aurora_app_paystaging?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&sslMode=${PAYSTAGING_DB_SSL_MODE:REQUIRED}
     username: ${PAYSTAGING_DB_USERNAME}
     password: ${PAYSTAGING_DB_PASSWORD}
 

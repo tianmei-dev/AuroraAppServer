@@ -28,7 +28,8 @@ public final class ExternalMySqlSupport {
         String password = env("TEST_DB_PASSWORD", "test");
 
         String url = "jdbc:mysql://" + host + ":" + port + "/" + db
-                + "?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&connectionTimeZone=UTC&allowPublicKeyRetrieval=true&useSSL=false";
+                + "?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&connectionTimeZone=UTC"
+                + "&forceConnectionTimeZoneToSession=true&allowPublicKeyRetrieval=true&useSSL=false";
 
         Map<String, Object> props = new LinkedHashMap<>();
         props.put("spring.datasource.url", url);

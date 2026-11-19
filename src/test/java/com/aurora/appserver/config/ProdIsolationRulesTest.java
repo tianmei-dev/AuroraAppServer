@@ -26,7 +26,8 @@ import org.springframework.mock.env.MockEnvironment;
 class ProdIsolationRulesTest {
 
     private static final String GOOD_URL =
-            "jdbc:mysql://db.prod.example.com:3306/aurora_app_prod?sslMode=REQUIRED";
+            "jdbc:mysql://db.prod.example.com:3306/aurora_app_prod"
+                    + "?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&sslMode=REQUIRED";
 
     private static MockEnvironment valid() {
         MockEnvironment env = new MockEnvironment();
@@ -75,7 +76,11 @@ class ProdIsolationRulesTest {
 
         new ProdEnvironmentGuard().postProcessEnvironment(env, null);
 
-        assertThat(env.getProperty("spring.datasource.url")).contains("/aurora_app_prod?").contains("sslMode=REQUIRED");
+        assertThat(env.getProperty("spring.datasource.url"))
+                .contains("/aurora_app_prod?")
+                .contains("sslMode=REQUIRED")
+                .contains("connectionTimeZone=UTC")
+                .contains("forceConnectionTimeZoneToSession=true");
         assertThat(env.getProperty("server.port")).isEqualTo("8082");
         assertThat(env.getProperty("aurora.payment.provider")).isEqualTo("YUSEN");
         assertThat(env.getProperty("aurora.payment.environment")).isEqualTo("PRODUCTION");
@@ -95,6 +100,15 @@ class ProdIsolationRulesTest {
             env.setProperty("spring.datasource.url", "jdbc:mysql://127.0.0.1:3306/" + db);
             assertThatThrownBy(() -> guard(env)).hasMessageContaining(db + " belongs to another environment");
         }
+    }
+
+    @Test
+    void t02b_jdbcUrlWithoutForceConnectionTimeZoneToSessionIsRejected() {
+        MockEnvironment env = valid();
+        env.setProperty(
+                "spring.datasource.url",
+                "jdbc:mysql://db.prod.example.com:3306/aurora_app_prod?connectionTimeZone=UTC&sslMode=REQUIRED");
+        assertThatThrownBy(() -> guard(env)).hasMessageContaining("forceConnectionTimeZoneToSession=true");
     }
 
     @Test

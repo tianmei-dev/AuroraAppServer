@@ -102,6 +102,39 @@ class DeviceTrialIT {
     }
 
     @Test
+    void mysqlSessionIsUtcAndTimestampRoundTripKeepsInstantAndRemainingSeconds() throws Exception {
+        String sessionTz = jdbcTemplate.queryForObject("SELECT @@session.time_zone", String.class);
+        assertThat(sessionTz).isIn("+00:00", "UTC");
+
+        String deviceKey = "device-tz-roundtrip-" + System.nanoTime();
+        Instant expectedExpires = Instant.parse("2026-01-04T00:00:00Z");
+        JsonNode data = activate(APP_A, deviceKey, null);
+        assertThat(data.get("trialExpiresAt").asText()).isEqualTo("2026-01-04T00:00:00Z");
+        assertThat(data.get("remainingSeconds").asLong()).isEqualTo(FULL);
+        assertPersistedExpires(APP_A, deviceKey, expectedExpires);
+
+        String hash = deviceKeyHasher.hash(APP_A, deviceKey);
+        // With session UTC, DATE_FORMAT of TIMESTAMP shows the UTC wall-clock value stored.
+        String utcWall = jdbcTemplate.queryForObject(
+                """
+                        SELECT DATE_FORMAT(trial_expires_at, '%Y-%m-%dT%H:%i:%s')
+                        FROM device_trials
+                        WHERE app_id = (SELECT id FROM apps WHERE app_code = ?) AND device_key_hash = ?
+                        """,
+                String.class,
+                APP_A,
+                hash);
+        assertThat(utcWall).isEqualTo("2026-01-04T00:00:00");
+
+        ClockConfig.CLOCK.advance(Duration.ofHours(8));
+        JsonNode later = activate(APP_A, deviceKey, null);
+        assertThat(later.get("status").asText()).isEqualTo("ACTIVE");
+        assertThat(later.get("trialExpiresAt").asText()).isEqualTo("2026-01-04T00:00:00Z");
+        assertThat(later.get("remainingSeconds").asLong()).isEqualTo((72L - 8L) * HOUR);
+        assertThat(later.get("serverTime").asText()).isEqualTo("2026-01-01T08:00:00Z");
+    }
+
+    @Test
     void firstOnlineWithFullCap() throws Exception {
         String deviceKey = "device-full-cap-" + System.nanoTime();
         JsonNode data = activate(APP_A, deviceKey, FULL);

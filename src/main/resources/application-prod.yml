@@ -12,7 +12,9 @@ server:
 spring:
   datasource:
     # Database name is fixed on purpose; only host/port/credentials vary per deployment.
-    url: jdbc:mysql://${PROD_DB_HOST}:${PROD_DB_PORT:3306}/aurora_app_prod?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&connectionTimeZone=UTC&sslMode=${PROD_DB_SSL_MODE:REQUIRED}
+    # forceConnectionTimeZoneToSession: SET time_zone on the MySQL session so TIMESTAMP(3)
+    # Instant round-trips stay UTC (connectionTimeZone alone is not enough on some servers).
+    url: jdbc:mysql://${PROD_DB_HOST}:${PROD_DB_PORT:3306}/aurora_app_prod?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&sslMode=${PROD_DB_SSL_MODE:REQUIRED}
     username: ${PROD_DB_USERNAME}
     password: ${PROD_DB_PASSWORD}
 

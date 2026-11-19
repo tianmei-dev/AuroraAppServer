@@ -26,7 +26,8 @@ import org.springframework.mock.env.MockEnvironment;
 class PaystagingIsolationRulesTest {
 
     private static final String GOOD_URL =
-            "jdbc:mysql://db.paystaging.example.com:3306/aurora_app_paystaging?sslMode=REQUIRED";
+            "jdbc:mysql://db.paystaging.example.com:3306/aurora_app_paystaging"
+                    + "?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&sslMode=REQUIRED";
 
     /** Fictional, public-looking values only. */
     private static MockEnvironment valid() {
@@ -76,7 +77,11 @@ class PaystagingIsolationRulesTest {
 
         new PaystagingEnvironmentGuard().postProcessEnvironment(env, null);
 
-        assertThat(env.getProperty("spring.datasource.url")).contains("/aurora_app_paystaging?").contains("sslMode=REQUIRED");
+        assertThat(env.getProperty("spring.datasource.url"))
+                .contains("/aurora_app_paystaging?")
+                .contains("sslMode=REQUIRED")
+                .contains("connectionTimeZone=UTC")
+                .contains("forceConnectionTimeZoneToSession=true");
         assertThat(env.getProperty("server.port")).isEqualTo("8082");
         assertThat(env.getProperty("aurora.payment.provider")).isEqualTo("YUSEN");
         assertThat(env.getProperty("aurora.payment.environment")).isEqualTo("STAGING");

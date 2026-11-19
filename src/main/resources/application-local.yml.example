@@ -4,7 +4,7 @@
 
 spring:
   datasource:
-    url: jdbc:mysql://127.0.0.1:3308/aurora_app?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&connectionTimeZone=UTC&allowPublicKeyRetrieval=true&useSSL=false
+    url: jdbc:mysql://127.0.0.1:3308/aurora_app?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&allowPublicKeyRetrieval=true&useSSL=false
     username: aurora
     password: change-me
 
