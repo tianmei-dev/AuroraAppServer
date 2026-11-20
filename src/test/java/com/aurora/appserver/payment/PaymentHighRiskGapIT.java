@@ -11,6 +11,7 @@ import com.aurora.appserver.membership.domain.MembershipStatus;
 import com.aurora.appserver.membership.domain.PlanCode;
 import com.aurora.appserver.membership.repository.MembershipPlanRepository;
 import com.aurora.appserver.membership.service.MembershipService;
+import com.aurora.appserver.payment.domain.PaymentCheckoutChannel;
 import com.aurora.appserver.payment.domain.PaymentEnvironment;
 import com.aurora.appserver.payment.domain.PaymentOrderEntity;
 import com.aurora.appserver.payment.domain.PaymentOrderTrigger;
@@ -204,7 +205,8 @@ class PaymentHighRiskGapIT {
                         .header("X-App-Code", APP)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + firstLogin.token())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"planCode\":\"YEARLY\",\"clientRequestId\":\"" + UUID.randomUUID() + "\"}"))
+                        .content("{\"planCode\":\"YEARLY\",\"clientRequestId\":\"" + UUID.randomUUID()
+                                + "\",\"payChannel\":\"WECHAT_PAY\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andReturn();
@@ -285,7 +287,8 @@ class PaymentHighRiskGapIT {
         Instant now = TestConfig.CLOCK.instant();
         return orderRepository.saveAndFlush(PaymentOrderEntity.createPending(
                 appId, userId, orderNoGenerator.next(now), "gap-" + UUID.randomUUID(), plan,
-                PaymentProviderCode.YUSEN, PaymentEnvironment.TEST, YUSEN_PID, now.plus(Duration.ofMinutes(30))));
+                PaymentProviderCode.YUSEN, PaymentEnvironment.TEST, YUSEN_PID,
+                PaymentCheckoutChannel.WECHAT_PAY, now.plus(Duration.ofMinutes(30))));
     }
 
     private static Map<String, String> yusenNotify(String orderNo, String money, String tradeStatus) {

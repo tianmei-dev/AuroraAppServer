@@ -25,8 +25,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
- * Yusen unified checkout via submit.php without {@code type}, so the user picks the payment
- * method on Yusen's hosted cashier page (merchant doc "页面跳转支付": type 不传会跳转到收银台支付).
+ * Yusen page checkout via {@code /submit.php}. When {@link CheckoutRequest#yusenType()} is set
+ * ({@code wxpay}/{@code alipay}), it is included in the signed query so the hosted page opens that
+ * channel directly. When null (legacy orders), {@code type} is omitted and Yusen shows the unified
+ * cashier.
  *
  * <p>Order query follows doc "[API]查询单个订单" (GET api.php?act=order). Outbound HTTP goes through
  * {@link YusenHttpTransport}; the default transport refuses to connect unless explicitly enabled.
@@ -75,6 +77,10 @@ public class YusenPaymentProvider implements PaymentProvider {
         requireConfigured();
         Map<String, String> params = new LinkedHashMap<>();
         params.put("pid", config.getPid());
+        // type must be part of the signed payload when directing to a specific channel.
+        if (request.yusenType() != null && !request.yusenType().isBlank()) {
+            params.put("type", request.yusenType().trim());
+        }
         params.put("out_trade_no", request.orderNo());
         params.put("notify_url", config.getNotifyUrl());
         params.put("return_url", config.getReturnUrl());

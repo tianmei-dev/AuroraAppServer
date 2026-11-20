@@ -17,6 +17,7 @@ import com.aurora.appserver.membership.repository.MembershipPlanRepository;
 import com.aurora.appserver.membership.service.MembershipService;
 import com.aurora.appserver.membership.service.MembershipService.GrantCommand;
 import com.aurora.appserver.membership.service.MembershipService.MembershipStatusView;
+import com.aurora.appserver.payment.domain.PaymentCheckoutChannel;
 import com.aurora.appserver.payment.domain.PaymentEnvironment;
 import com.aurora.appserver.payment.domain.PaymentOrderEntity;
 import com.aurora.appserver.payment.domain.PaymentProviderCode;
@@ -702,7 +703,7 @@ class PaymentConfirmationIT {
                             .header(HttpHeaders.AUTHORIZATION, "Bearer " + login.token())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"planCode\":\"" + planCode + "\",\"clientRequestId\":\""
-                                    + UUID.randomUUID() + "\"}"))
+                                    + UUID.randomUUID() + "\",\"payChannel\":\"WECHAT_PAY\"}"))
                     .andExpect(status().isOk())
                     .andReturn();
             String orderNo = objectMapper.readTree(result.getResponse().getContentAsString())
@@ -720,7 +721,8 @@ class PaymentConfirmationIT {
         Instant now = TestConfig.CLOCK.instant();
         return orderRepository.saveAndFlush(PaymentOrderEntity.createPending(
                 appAId, userId, orderNoGenerator.next(now), "it-" + UUID.randomUUID(), plan,
-                PaymentProviderCode.YUSEN, PaymentEnvironment.TEST, YUSEN_PID, now.plus(Duration.ofMinutes(30))));
+                PaymentProviderCode.YUSEN, PaymentEnvironment.TEST, YUSEN_PID,
+                PaymentCheckoutChannel.WECHAT_PAY, now.plus(Duration.ofMinutes(30))));
     }
 
     private static Map<String, String> yusenNotify(String orderNo, String money, String tradeStatus) {

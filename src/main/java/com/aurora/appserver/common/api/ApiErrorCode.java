@@ -29,6 +29,8 @@ public enum ApiErrorCode {
     PAYMENT_CLIENT_REQUEST_CONFLICT(40011, "clientRequestId was already used for a different plan"),
     PAYMENT_LIFETIME_ALREADY_ACTIVE(40012, "Lifetime membership is already active"),
     PAYMENT_ORDER_NOT_CONFIRMED(40013, "Payment order is not confirmed as paid"),
+    PAYMENT_CHANNEL_INVALID(40014, "Payment channel is missing or unsupported"),
+    PAYMENT_CHANNEL_CONFLICT(40015, "clientRequestId was already used for a different payment channel"),
 
     UNAUTHORIZED(40100, "Unauthorized"),
     SESSION_EXPIRED(40101, "Session expired"),

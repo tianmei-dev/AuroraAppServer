@@ -10,6 +10,7 @@ import com.aurora.appserver.membership.domain.PlanCode;
 import com.aurora.appserver.membership.repository.MembershipPlanRepository;
 import com.aurora.appserver.membership.service.MembershipService;
 import com.aurora.appserver.payment.config.PaymentProperties;
+import com.aurora.appserver.payment.domain.PaymentCheckoutChannel;
 import com.aurora.appserver.payment.domain.PaymentOrderEntity;
 import com.aurora.appserver.payment.domain.PaymentOrderEventEntity;
 import com.aurora.appserver.payment.domain.PaymentOrderRequestEntity;
@@ -36,7 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Creates and reads payment orders. Price, duration and lifetime flag are snapshotted from
- * membership_plans; the client only chooses planCode and supplies an idempotency key.
+ * membership_plans; the client chooses planCode, payChannel and an idempotency key.
  *
  * <p>Concurrency: creation runs under a per-user row lock (users FOR UPDATE), so concurrent
  * requests for the same user serialize; unique constraints remain the final backstop.
@@ -98,17 +99,26 @@ public class PaymentOrderService {
     ) {
     }
 
-    public OrderView create(Long appId, Long userId, String planCodeRaw, String clientRequestIdRaw) {
+    public OrderView create(
+            Long appId,
+            Long userId,
+            String planCodeRaw,
+            String clientRequestIdRaw,
+            String payChannelRaw
+    ) {
         String clientRequestId = validateClientRequestId(clientRequestIdRaw);
         PlanCode planCode = parsePlanCode(planCodeRaw);
+        PaymentCheckoutChannel channel = PaymentCheckoutChannel.require(payChannelRaw);
         PaymentProvider provider = providerRegistry.requireActive();
 
-        Optional<PaymentOrderEntity> replay = findByClientRequest(appId, userId, clientRequestId, planCode);
+        Optional<PaymentOrderEntity> replay =
+                findByClientRequest(appId, userId, clientRequestId, planCode, channel);
         if (replay.isPresent()) {
             return toView(replay.get());
         }
 
-        PaymentOrderEntity order = createWithRetry(appId, userId, clientRequestId, planCode, provider);
+        PaymentOrderEntity order =
+                createWithRetry(appId, userId, clientRequestId, planCode, channel, provider);
         return toView(order);
     }
 
@@ -123,14 +133,20 @@ public class PaymentOrderService {
     }
 
     private PaymentOrderEntity createWithRetry(
-            Long appId, Long userId, String clientRequestId, PlanCode planCode, PaymentProvider provider) {
+            Long appId,
+            Long userId,
+            String clientRequestId,
+            PlanCode planCode,
+            PaymentCheckoutChannel channel,
+            PaymentProvider provider
+    ) {
         for (int attempt = 1; ; attempt++) {
             try {
-                return self.createOrReuseInTx(appId, userId, clientRequestId, planCode, provider);
+                return self.createOrReuseInTx(appId, userId, clientRequestId, planCode, channel, provider);
             } catch (DataIntegrityViolationException ex) {
                 // Transaction already rolled back; the winning request's mapping is now visible.
                 Optional<PaymentOrderEntity> winner =
-                        findByClientRequest(appId, userId, clientRequestId, planCode);
+                        findByClientRequest(appId, userId, clientRequestId, planCode, channel);
                 if (winner.isPresent()) {
                     return winner.get();
                 }
@@ -148,11 +164,18 @@ public class PaymentOrderService {
 
     @Transactional
     public PaymentOrderEntity createOrReuseInTx(
-            Long appId, Long userId, String clientRequestId, PlanCode planCode, PaymentProvider provider) {
+            Long appId,
+            Long userId,
+            String clientRequestId,
+            PlanCode planCode,
+            PaymentCheckoutChannel channel,
+            PaymentProvider provider
+    ) {
         userRepository.findForUpdate(appId, userId)
                 .orElseThrow(() -> new BusinessException(ApiErrorCode.UNAUTHORIZED));
 
-        Optional<PaymentOrderEntity> replay = findByClientRequest(appId, userId, clientRequestId, planCode);
+        Optional<PaymentOrderEntity> replay =
+                findByClientRequest(appId, userId, clientRequestId, planCode, channel);
         if (replay.isPresent()) {
             return replay.get();
         }
@@ -177,7 +200,8 @@ public class PaymentOrderService {
                         PaymentOrderStatus.PENDING_PAYMENT,
                         provider.code(),
                         properties.getEnvironment(),
-                        now.plus(properties.getReuseMinRemaining()));
+                        now.plus(properties.getReuseMinRemaining()))
+                .filter(order -> channel.equals(order.getCheckoutChannel()));
         if (reusable.isPresent()) {
             PaymentOrderEntity order = reusable.get();
             requestRepository.saveAndFlush(PaymentOrderRequestEntity.create(
@@ -188,8 +212,8 @@ public class PaymentOrderService {
                     order.getStatus(),
                     PaymentOrderTrigger.REUSE,
                     "clientRequestId=" + clientRequestId));
-            log.info("Payment order reused appId={} userId={} orderNo={} plan={}",
-                    appId, userId, order.getOrderNo(), planCode);
+            log.info("Payment order reused appId={} userId={} orderNo={} plan={} channel={}",
+                    appId, userId, order.getOrderNo(), planCode, channel);
             return order;
         }
 
@@ -202,26 +226,37 @@ public class PaymentOrderService {
                 provider.code(),
                 properties.getEnvironment(),
                 provider.merchantPid(),
+                channel,
                 now.plus(properties.getOrderTtl())));
         requestRepository.saveAndFlush(PaymentOrderRequestEntity.create(
                 appId, userId, clientRequestId, order.getId(), planCode, false));
         eventRepository.save(PaymentOrderEventEntity.of(
                 order.getId(), null, PaymentOrderStatus.PENDING_PAYMENT, PaymentOrderTrigger.CREATE, null));
-        log.info("Payment order created appId={} userId={} orderNo={} plan={} amountFen={} provider={} env={}",
+        log.info("Payment order created appId={} userId={} orderNo={} plan={} amountFen={} channel={} provider={} env={}",
                 appId, userId, order.getOrderNo(), planCode, order.getAmountFen(),
-                order.getProvider(), order.getEnvironment());
+                channel, order.getProvider(), order.getEnvironment());
         return order;
     }
 
     private Optional<PaymentOrderEntity> findByClientRequest(
-            Long appId, Long userId, String clientRequestId, PlanCode planCode) {
+            Long appId,
+            Long userId,
+            String clientRequestId,
+            PlanCode planCode,
+            PaymentCheckoutChannel channel
+    ) {
         return requestRepository.findByAppIdAndUserIdAndClientRequestId(appId, userId, clientRequestId)
                 .map(request -> {
                     if (request.getPlanCode() != planCode) {
                         throw new BusinessException(ApiErrorCode.PAYMENT_CLIENT_REQUEST_CONFLICT);
                     }
-                    return orderRepository.findByAppIdAndUserIdAndId(appId, userId, request.getOrderId())
+                    PaymentOrderEntity order = orderRepository
+                            .findByAppIdAndUserIdAndId(appId, userId, request.getOrderId())
                             .orElseThrow(() -> new BusinessException(ApiErrorCode.INTERNAL_ERROR));
+                    if (order.getCheckoutChannel() != null && order.getCheckoutChannel() != channel) {
+                        throw new BusinessException(ApiErrorCode.PAYMENT_CHANNEL_CONFLICT);
+                    }
+                    return order;
                 });
     }
 
@@ -230,10 +265,16 @@ public class PaymentOrderService {
         PaymentOrderStatus effective = order.effectiveStatus(now);
         PaymentLink link = null;
         if (order.isPayable(now)) {
+            String yusenType = order.getCheckoutChannel() == null
+                    ? null
+                    : order.getCheckoutChannel().yusenType();
             link = providerRegistry.find(order.getProvider())
                     .filter(PaymentProvider::isConfigured)
                     .map(p -> p.buildCheckoutLink(new CheckoutRequest(
-                            order.getOrderNo(), order.getAmountFen(), order.getPlanDisplayName())))
+                            order.getOrderNo(),
+                            order.getAmountFen(),
+                            order.getPlanDisplayName(),
+                            yusenType)))
                     .orElse(null);
             if (link != null && !PaymentLinkPolicy.allowed(order.getEnvironment(), link)) {
                 alertService.alert(PaymentAlertType.PAYMENT_LINK_WITHHELD, order.getOrderNo(),

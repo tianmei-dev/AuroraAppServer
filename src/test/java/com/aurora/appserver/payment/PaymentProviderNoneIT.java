@@ -76,7 +76,8 @@ class PaymentProviderNoneIT {
                         .header("X-App-Code", APP)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"planCode\":\"MONTHLY\",\"clientRequestId\":\"" + UUID.randomUUID() + "\"}"))
+                        .content("{\"planCode\":\"MONTHLY\",\"clientRequestId\":\"" + UUID.randomUUID()
+                                + "\",\"payChannel\":\"WECHAT_PAY\"}"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.code").value(50003));
 

@@ -94,7 +94,8 @@ class DefaultSecurityUserDisabledIT {
         mockMvc.perform(post("/api/v1/payment/orders")
                         .header("X-App-Code", APP)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"planCode\":\"MONTHLY\",\"clientRequestId\":\"" + UUID.randomUUID() + "\"}"))
+                        .content("{\"planCode\":\"MONTHLY\",\"clientRequestId\":\"" + UUID.randomUUID()
+                                + "\",\"payChannel\":\"WECHAT_PAY\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(40100));
     }

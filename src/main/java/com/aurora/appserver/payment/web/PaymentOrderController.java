@@ -32,7 +32,11 @@ public class PaymentOrderController {
     ) {
         SessionPrincipal principal = requirePrincipal(authentication);
         return ApiResponse.success(PaymentOrderResponse.from(paymentOrderService.create(
-                principal.appId(), principal.userId(), request.planCode(), request.clientRequestId())));
+                principal.appId(),
+                principal.userId(),
+                request.planCode(),
+                request.clientRequestId(),
+                request.payChannel())));
     }
 
     @GetMapping("/{orderNo}")

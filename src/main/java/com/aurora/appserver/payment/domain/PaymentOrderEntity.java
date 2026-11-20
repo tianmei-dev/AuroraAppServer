@@ -74,6 +74,11 @@ public class PaymentOrderEntity {
     @Column(name = "merchant_pid", length = 64)
     private String merchantPid;
 
+    /** Client-requested checkout channel; null on historical orders. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "checkout_channel", length = 32)
+    private PaymentCheckoutChannel checkoutChannel;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private PaymentOrderStatus status;
@@ -151,6 +156,7 @@ public class PaymentOrderEntity {
             PaymentProviderCode provider,
             PaymentEnvironment environment,
             String merchantPid,
+            PaymentCheckoutChannel checkoutChannel,
             Instant expiresAt
     ) {
         PaymentOrderEntity order = new PaymentOrderEntity();
@@ -168,6 +174,7 @@ public class PaymentOrderEntity {
         order.provider = provider;
         order.environment = environment;
         order.merchantPid = merchantPid;
+        order.checkoutChannel = checkoutChannel;
         order.status = PaymentOrderStatus.PENDING_PAYMENT;
         order.expiresAt = expiresAt;
         return order;
@@ -361,6 +368,10 @@ public class PaymentOrderEntity {
 
     public String getMerchantPid() {
         return merchantPid;
+    }
+
+    public PaymentCheckoutChannel getCheckoutChannel() {
+        return checkoutChannel;
     }
 
     public PaymentOrderStatus getStatus() {

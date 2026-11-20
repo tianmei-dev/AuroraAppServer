@@ -154,7 +154,8 @@ class PaymentOrderReuseDisabledIT {
     }
 
     private static String body(String planCode, String requestId) {
-        return "{\"planCode\":\"" + planCode + "\",\"clientRequestId\":\"" + requestId + "\"}";
+        return "{\"planCode\":\"" + planCode + "\",\"clientRequestId\":\"" + requestId
+                + "\",\"payChannel\":\"WECHAT_PAY\"}";
     }
 
     private long count(String sql, long userId) {

@@ -44,7 +44,7 @@ class YusenPaymentProviderTest {
     @Test
     void checkoutLinkTargetsSubmitPhpWithoutTypeAndWithoutKey() {
         PaymentLink link = provider().buildCheckoutLink(
-                new CheckoutRequest("CV20261106131500ABCDEFGH2345", 1990, "年卡"));
+                new CheckoutRequest("CV20261106131500ABCDEFGH2345", 1990, "年卡", null));
 
         assertThat(link.kind()).isEqualTo(PaymentLink.PayKind.URL);
         URI uri = URI.create(link.value());
@@ -65,9 +65,27 @@ class YusenPaymentProviderTest {
     }
 
     @Test
+    void checkoutLinkIncludesSignedWxpayType() {
+        PaymentLink link = provider().buildCheckoutLink(
+                new CheckoutRequest("CV20261106131500ABCDEFGH2345", 590, "月卡", "wxpay"));
+        Map<String, String> query = parseQuery(URI.create(link.value()).getRawQuery());
+        assertThat(query).containsEntry("type", "wxpay");
+        assertThat(YusenSigner.verify(query, KEY)).isTrue();
+    }
+
+    @Test
+    void checkoutLinkIncludesSignedAlipayType() {
+        PaymentLink link = provider().buildCheckoutLink(
+                new CheckoutRequest("CV20261106131500ABCDEFGH2345", 1990, "年卡", "alipay"));
+        Map<String, String> query = parseQuery(URI.create(link.value()).getRawQuery());
+        assertThat(query).containsEntry("type", "alipay");
+        assertThat(YusenSigner.verify(query, KEY)).isTrue();
+    }
+
+    @Test
     void urlEncodingIsSeparateFromSignatureComputation() {
         PaymentLink link = provider().buildCheckoutLink(
-                new CheckoutRequest("CV20261106131500ABCDEFGH2345", 1990, "年卡"));
+                new CheckoutRequest("CV20261106131500ABCDEFGH2345", 1990, "年卡", null));
         String raw = URI.create(link.value()).getRawQuery();
 
         assertThat(raw).contains("name=%E5%B9%B4%E5%8D%A1");
@@ -83,21 +101,21 @@ class YusenPaymentProviderTest {
 
     @Test
     void sameOrderProducesDeterministicLink() {
-        CheckoutRequest request = new CheckoutRequest("CV20261106131500ABCDEFGH2345", 590, "月卡");
+        CheckoutRequest request = new CheckoutRequest("CV20261106131500ABCDEFGH2345", 590, "月卡", null);
         assertThat(provider().buildCheckoutLink(request).value())
                 .isEqualTo(provider().buildCheckoutLink(request).value());
     }
 
     @Test
     void paymentLinkToStringRedactsSignedUrl() {
-        PaymentLink link = provider().buildCheckoutLink(new CheckoutRequest("CV1", 590, "月卡"));
+        PaymentLink link = provider().buildCheckoutLink(new CheckoutRequest("CV1", 590, "月卡", null));
         assertThat(link.toString()).doesNotContain("submit.php").doesNotContain("sign=");
     }
 
     @Test
     void subjectIsTruncatedToDocumentedByteLimitOnCodePointBoundary() {
         String longName = "会".repeat(60);
-        PaymentLink link = provider().buildCheckoutLink(new CheckoutRequest("CV1", 590, longName));
+        PaymentLink link = provider().buildCheckoutLink(new CheckoutRequest("CV1", 590, longName, null));
         String name = parseQuery(URI.create(link.value()).getRawQuery()).get("name");
         assertThat(name.getBytes(StandardCharsets.UTF_8).length).isLessThanOrEqualTo(127);
         assertThat(name).isEqualTo("会".repeat(42));
@@ -147,7 +165,7 @@ class YusenPaymentProviderTest {
         YusenPaymentProvider unconfigured = new YusenPaymentProvider(new PaymentProperties());
         assertThat(unconfigured.isConfigured()).isFalse();
         assertThat(unconfigured.queryOrder("CV1").providerMsg()).isEqualTo("not_configured");
-        assertThatThrownBy(() -> unconfigured.buildCheckoutLink(new CheckoutRequest("CV1", 590, "月卡")))
+        assertThatThrownBy(() -> unconfigured.buildCheckoutLink(new CheckoutRequest("CV1", 590, "月卡", null)))
                 .isInstanceOf(IllegalStateException.class);
     }
 

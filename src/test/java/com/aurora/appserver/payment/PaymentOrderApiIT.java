@@ -190,7 +190,7 @@ class PaymentOrderApiIT {
     void forgedAmountUserIdChannelAndDurationAreIgnored() throws Exception {
         Login login = login(APP_A);
         String forged = """
-                {"planCode":"YEARLY","clientRequestId":"%s",
+                {"planCode":"YEARLY","clientRequestId":"%s","payChannel":"WECHAT_PAY",
                  "amountFen":1,"amount":"0.01","money":"0.01","userId":999999,
                  "channel":"ALIPAY","type":"alipay","durationDays":9999,"isLifetime":true,
                  "status":"FULFILLED"}
@@ -537,7 +537,8 @@ class PaymentOrderApiIT {
     }
 
     private static String body(String planCode, String requestId) {
-        return "{\"planCode\":\"" + planCode + "\",\"clientRequestId\":\"" + requestId + "\"}";
+        return "{\"planCode\":\"" + planCode + "\",\"clientRequestId\":\"" + requestId
+                + "\",\"payChannel\":\"WECHAT_PAY\"}";
     }
 
     private static String newRequestId() {
