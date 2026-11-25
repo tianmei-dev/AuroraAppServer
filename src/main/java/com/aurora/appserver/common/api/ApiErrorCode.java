@@ -31,6 +31,8 @@ public enum ApiErrorCode {
     PAYMENT_ORDER_NOT_CONFIRMED(40013, "Payment order is not confirmed as paid"),
     PAYMENT_CHANNEL_INVALID(40014, "Payment channel is missing or unsupported"),
     PAYMENT_CHANNEL_CONFLICT(40015, "clientRequestId was already used for a different payment channel"),
+    ACCOUNT_DELETE_PENDING_ORDER(40016, "请等待当前待支付订单过期后再注销账号"),
+    ACCOUNT_DELETE_PAID_UNFULFILLED(40017, "存在已支付未完成履约的订单，请联系人工客服处理：594841675@qq.com"),
 
     UNAUTHORIZED(40100, "Unauthorized"),
     SESSION_EXPIRED(40101, "Session expired"),

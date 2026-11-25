@@ -16,4 +16,6 @@ public interface WechatIdentityRepository extends JpaRepository<WechatIdentityEn
     boolean existsByAppIdAndWechatAppidAndOpenid(Long appId, String wechatAppid, String openid);
 
     long countByAppIdAndUserId(Long appId, Long userId);
+
+    void deleteByAppIdAndUserId(Long appId, Long userId);
 }

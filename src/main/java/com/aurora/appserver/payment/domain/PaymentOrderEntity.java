@@ -223,6 +223,7 @@ public class PaymentOrderEntity {
         if (status != PaymentOrderStatus.PENDING_PAYMENT && status != PaymentOrderStatus.EXPIRED) {
             return false;
         }
+        boolean accountDeleted = isAccountDeletedAnomaly();
         // Late = confirmed only after we had already expired the order locally.
         boolean late = status == PaymentOrderStatus.EXPIRED;
         this.status = PaymentOrderStatus.PAID;
@@ -234,10 +235,19 @@ public class PaymentOrderEntity {
         this.paidChannelRaw = truncate(paidChannelRaw, 32);
         this.paidAmountFen = paidAmountFen;
         this.providerPaidAtRaw = truncate(providerPaidAtRaw, 32);
-        this.nextFulfillAt = now;
-        if (late) {
-            this.latePaid = true;
-            this.anomalyCode = PaymentAnomaly.LATE_PAYMENT.name();
+        if (accountDeleted) {
+            // Keep ACCOUNT_DELETED and never schedule membership fulfillment for a closed account.
+            this.anomalyCode = PaymentAnomaly.ACCOUNT_DELETED.name();
+            this.nextFulfillAt = FULFILL_BLOCKED_UNTIL;
+            if (late) {
+                this.latePaid = true;
+            }
+        } else {
+            this.nextFulfillAt = now;
+            if (late) {
+                this.latePaid = true;
+                this.anomalyCode = PaymentAnomaly.LATE_PAYMENT.name();
+            }
         }
         return true;
     }
@@ -251,6 +261,44 @@ public class PaymentOrderEntity {
         this.expiredAt = now;
         return true;
     }
+
+    /**
+     * Account deletion: close unpaid checkout immediately and tag for ops. Keeps the row.
+     * Returns true when status changed to EXPIRED.
+     */
+    public boolean expireForAccountDeletion(Instant now) {
+        if (status != PaymentOrderStatus.PENDING_PAYMENT) {
+            return false;
+        }
+        if (expiresAt.isAfter(now)) {
+            this.expiresAt = now;
+        }
+        this.status = PaymentOrderStatus.EXPIRED;
+        this.expiredAt = now;
+        this.anomalyCode = PaymentAnomaly.ACCOUNT_DELETED.name();
+        return true;
+    }
+
+    /**
+     * Account deletion: keep PAID rows but permanently stop fulfillment retries.
+     * Returns true when the order was PAID and is now blocked.
+     */
+    public boolean blockFulfillmentForAccountDeletion() {
+        if (status != PaymentOrderStatus.PAID) {
+            return false;
+        }
+        this.anomalyCode = PaymentAnomaly.ACCOUNT_DELETED.name();
+        this.nextFulfillAt = FULFILL_BLOCKED_UNTIL;
+        this.lastFulfillError = "account_deleted";
+        return true;
+    }
+
+    public boolean isAccountDeletedAnomaly() {
+        return PaymentAnomaly.ACCOUNT_DELETED.name().equals(anomalyCode);
+    }
+
+    /** Sentinel so scheduled fulfill jobs never reclaim this order. */
+    static final Instant FULFILL_BLOCKED_UNTIL = Instant.parse("9999-01-01T00:00:00Z");
 
     /** PAID -> FULFILLED. */
     public boolean markFulfilled(Instant now, Long grantId) {
@@ -268,6 +316,9 @@ public class PaymentOrderEntity {
     /** Claims a fulfillment attempt for {@code lease}; false if not PAID or another worker holds it. */
     public boolean claimFulfillment(Instant now, java.time.Duration lease) {
         if (status != PaymentOrderStatus.PAID) {
+            return false;
+        }
+        if (isAccountDeletedAnomaly()) {
             return false;
         }
         if (nextFulfillAt != null && nextFulfillAt.isAfter(now)) {

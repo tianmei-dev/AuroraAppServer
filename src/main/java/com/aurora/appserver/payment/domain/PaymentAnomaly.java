@@ -8,5 +8,7 @@ public enum PaymentAnomaly {
     QUERY_AMOUNT_MISMATCH,
     QUERY_MERCHANT_MISMATCH,
     QUERY_ORDER_MISMATCH,
-    EXPIRED_INCONCLUSIVE
+    EXPIRED_INCONCLUSIVE,
+    /** Account closed; keep the order row but never fulfill membership to that user. */
+    ACCOUNT_DELETED
 }

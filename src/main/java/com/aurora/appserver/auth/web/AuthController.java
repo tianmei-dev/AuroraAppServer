@@ -4,6 +4,7 @@ import com.aurora.appserver.auth.domain.UserEntity;
 import com.aurora.appserver.auth.domain.UserStatus;
 import com.aurora.appserver.auth.repository.UserRepository;
 import com.aurora.appserver.auth.security.SessionPrincipal;
+import com.aurora.appserver.auth.service.AccountDeletionService;
 import com.aurora.appserver.auth.service.AuthSessionService;
 import com.aurora.appserver.auth.service.WechatLoginService;
 import com.aurora.appserver.common.api.ApiErrorCode;
@@ -26,15 +27,18 @@ public class AuthController {
 
     private final WechatLoginService wechatLoginService;
     private final AuthSessionService authSessionService;
+    private final AccountDeletionService accountDeletionService;
     private final UserRepository userRepository;
 
     public AuthController(
             WechatLoginService wechatLoginService,
             AuthSessionService authSessionService,
+            AccountDeletionService accountDeletionService,
             UserRepository userRepository
     ) {
         this.wechatLoginService = wechatLoginService;
         this.authSessionService = authSessionService;
+        this.accountDeletionService = accountDeletionService;
         this.userRepository = userRepository;
     }
 
@@ -72,6 +76,17 @@ public class AuthController {
     public ApiResponse<Void> logout(Authentication authentication) {
         SessionPrincipal principal = requirePrincipal(authentication);
         authSessionService.revokeCurrentSession(principal);
+        return ApiResponse.success();
+    }
+
+    /**
+     * Permanently closes the current account in this app: removes WeChat binding and sessions,
+     * terminates membership, retains payment/membership ledger rows on a DISABLED user tombstone.
+     */
+    @PostMapping("/account/delete")
+    public ApiResponse<Void> deleteAccount(Authentication authentication) {
+        SessionPrincipal principal = requirePrincipal(authentication);
+        accountDeletionService.deleteCurrentAccount(principal);
         return ApiResponse.success();
     }
 

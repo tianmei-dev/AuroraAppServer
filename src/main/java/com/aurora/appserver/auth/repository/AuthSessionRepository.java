@@ -18,4 +18,6 @@ public interface AuthSessionRepository extends JpaRepository<AuthSessionEntity, 
     boolean existsByAppIdAndTokenHash(Long appId, String tokenHash);
 
     long countByAppIdAndUserId(Long appId, Long userId);
+
+    void deleteByAppIdAndUserId(Long appId, Long userId);
 }

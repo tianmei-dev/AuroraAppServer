@@ -1,6 +1,7 @@
 package com.aurora.appserver.membership.service;
 
 import com.aurora.appserver.auth.domain.UserEntity;
+import com.aurora.appserver.auth.domain.UserStatus;
 import com.aurora.appserver.auth.repository.UserRepository;
 import com.aurora.appserver.common.api.ApiErrorCode;
 import com.aurora.appserver.common.exception.BusinessException;
@@ -234,6 +235,39 @@ public class MembershipService {
         return new GrantResult(grant.getId(), false, statusInTx(command.appId(), command.userId()));
     }
 
+    /**
+     * Revokes every active grant for the user and refreshes the entitlement summary to none.
+     * Grant rows are retained (ledger). Used by account deletion only.
+     */
+    @Transactional
+    public MembershipStatusView revokeAllForAccountDeletion(Long appId, Long userId, String reason) {
+        if (appId == null || userId == null) {
+            throw new BusinessException(ApiErrorCode.MEMBERSHIP_GRANT_SOURCE_INVALID);
+        }
+        ensureEntitlementRowQuietly(appId, userId);
+        return executeWithLockRetry(() -> self.revokeAllForAccountDeletionInTx(appId, userId, reason));
+    }
+
+    @Transactional
+    public MembershipStatusView revokeAllForAccountDeletionInTx(Long appId, Long userId, String reason) {
+        lockEntitlement(appId, userId);
+        Instant now = clock.instant();
+        String truncated = truncateReason(reason);
+        List<MembershipGrantEntity> grants =
+                grantRepository.findByAppIdAndUserIdOrderByGrantedAtAscIdAsc(appId, userId);
+        for (MembershipGrantEntity grant : grants) {
+            if (!grant.isRevoked()) {
+                grant.revoke(now, truncated);
+                grantRepository.save(grant);
+            }
+        }
+        grantRepository.flush();
+        refreshEntitlement(appId, userId);
+        log.info("Membership revoked for account deletion appId={} userId={} grants={}",
+                appId, userId, grants.size());
+        return statusInTx(appId, userId);
+    }
+
     public MembershipStatusView revoke(
             Long appId,
             GrantSourceType sourceType,
@@ -354,6 +388,9 @@ public class MembershipService {
                 .orElseThrow(() -> new BusinessException(ApiErrorCode.NOT_FOUND, "User not found in app"));
         if (!user.getAppId().equals(appId)) {
             throw new BusinessException(ApiErrorCode.FORBIDDEN);
+        }
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new BusinessException(ApiErrorCode.FORBIDDEN, "User account is closed");
         }
     }
 

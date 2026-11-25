@@ -67,6 +67,11 @@ public class UserEntity {
         return status;
     }
 
+    /** Marks the user as permanently closed (tombstone). Idempotent. */
+    public void disable() {
+        this.status = UserStatus.DISABLED;
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }

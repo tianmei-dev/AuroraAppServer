@@ -47,6 +47,8 @@ public interface PaymentOrderRepository extends JpaRepository<PaymentOrderEntity
 
     long countByAppIdAndUserId(Long appId, Long userId);
 
+    List<PaymentOrderEntity> findByAppIdAndUserId(Long appId, Long userId);
+
     @Query("""
             SELECT o.id FROM PaymentOrderEntity o
             WHERE o.status = com.aurora.appserver.payment.domain.PaymentOrderStatus.PAID
