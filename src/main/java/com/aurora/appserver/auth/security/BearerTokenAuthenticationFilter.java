@@ -2,6 +2,7 @@ package com.aurora.appserver.auth.security;
 
 import com.aurora.appserver.app.context.AppContext;
 import com.aurora.appserver.app.service.AppRegistryService;
+import com.aurora.appserver.auth.service.AdminSessionService;
 import com.aurora.appserver.auth.service.AuthSessionService;
 import com.aurora.appserver.auth.web.AuthController;
 import com.aurora.appserver.common.api.ApiErrorCode;
@@ -27,15 +28,18 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class BearerTokenAuthenticationFilter extends OncePerRequestFilter {
 
     private final AuthSessionService authSessionService;
+    private final AdminSessionService adminSessionService;
     private final AppRegistryService appRegistryService;
     private final ObjectMapper objectMapper;
 
     public BearerTokenAuthenticationFilter(
             AuthSessionService authSessionService,
+            AdminSessionService adminSessionService,
             AppRegistryService appRegistryService,
             ObjectMapper objectMapper
     ) {
         this.authSessionService = authSessionService;
+        this.adminSessionService = adminSessionService;
         this.appRegistryService = appRegistryService;
         this.objectMapper = objectMapper;
     }
@@ -45,6 +49,7 @@ public class BearerTokenAuthenticationFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         return path.startsWith("/actuator/health")
                 || path.equals("/api/v1/auth/wechat/login")
+                || path.equals("/api/v1/auth/admin/login")
                 || path.equals("/api/v1/trial/device/activate")
                 || path.equals("/api/v1/membership/plans")
                 || path.equals("/api/v1/payment/notify/yusen")
@@ -72,13 +77,24 @@ public class BearerTokenAuthenticationFilter extends OncePerRequestFilter {
         try {
             String appCode = request.getHeader(AuthController.APP_CODE_HEADER);
             AppContext app = appRegistryService.requireActiveApp(appCode);
-            SessionPrincipal principal = authSessionService.authenticate(rawToken, app);
-            UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                    principal,
-                    null,
-                    List.of(new SimpleGrantedAuthority("ROLE_USER"))
-            );
-            SecurityContextHolder.getContext().setAuthentication(authentication);
+            if (isAdminApiPath(request.getRequestURI())) {
+                AdminPrincipal principal = adminSessionService.authenticate(rawToken, app);
+                UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                        principal,
+                        null,
+                        List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+                );
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+            } else {
+                // Admin tokens never authenticate against user session store — user APIs stay isolated.
+                SessionPrincipal principal = authSessionService.authenticate(rawToken, app);
+                UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                        principal,
+                        null,
+                        List.of(new SimpleGrantedAuthority("ROLE_USER"))
+                );
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+            }
             filterChain.doFilter(request, response);
         } catch (BusinessException ex) {
             SecurityContextHolder.clearContext();
@@ -86,11 +102,16 @@ public class BearerTokenAuthenticationFilter extends OncePerRequestFilter {
         }
     }
 
+    private static boolean isAdminApiPath(String path) {
+        return path != null && path.startsWith("/api/v1/auth/admin/");
+    }
+
     private void writeError(HttpServletResponse response, ApiErrorCode errorCode) throws IOException {
         int status = switch (errorCode) {
             case APP_NOT_FOUND -> HttpServletResponse.SC_NOT_FOUND;
-            case APP_DISABLED, FORBIDDEN, APP_CONTEXT_MISMATCH -> HttpServletResponse.SC_FORBIDDEN;
-            case APP_CONTEXT_REQUIRED, VALIDATION_FAILED, BAD_REQUEST -> HttpServletResponse.SC_BAD_REQUEST;
+            case APP_DISABLED, FORBIDDEN, APP_CONTEXT_MISMATCH, ADMIN_DISABLED -> HttpServletResponse.SC_FORBIDDEN;
+            case APP_CONTEXT_REQUIRED, VALIDATION_FAILED, BAD_REQUEST, ADMIN_NOT_CONFIGURED ->
+                    HttpServletResponse.SC_BAD_REQUEST;
             case SESSION_EXPIRED, SESSION_REVOKED, UNAUTHORIZED -> HttpServletResponse.SC_UNAUTHORIZED;
             default -> HttpServletResponse.SC_UNAUTHORIZED;
         };

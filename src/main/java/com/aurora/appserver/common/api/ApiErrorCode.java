@@ -33,6 +33,9 @@ public enum ApiErrorCode {
     PAYMENT_CHANNEL_CONFLICT(40015, "clientRequestId was already used for a different payment channel"),
     ACCOUNT_DELETE_PENDING_ORDER(40016, "请等待当前待支付订单过期后再注销账号"),
     ACCOUNT_DELETE_PAID_UNFULFILLED(40017, "存在已支付未完成履约的订单，请联系人工客服处理：594841675@qq.com"),
+    ADMIN_AUTH_FAILED(40018, "Admin username or password is incorrect"),
+    ADMIN_DISABLED(40019, "Admin account is disabled"),
+    ADMIN_NOT_CONFIGURED(40020, "Admin login is not configured for this application"),
 
     UNAUTHORIZED(40100, "Unauthorized"),
     SESSION_EXPIRED(40101, "Session expired"),
@@ -48,6 +51,7 @@ public enum ApiErrorCode {
     PAYMENT_ORDER_NOT_FOUND(40403, "Payment order not found"),
 
     TRIAL_RATE_LIMITED(42901, "Too many trial requests"),
+    ADMIN_LOGIN_RATE_LIMITED(42902, "Too many failed admin login attempts"),
 
     INTERNAL_ERROR(50000, "Internal server error"),
     WECHAT_CONFIG_MISSING(50001, "WeChat configuration is missing"),

@@ -11,6 +11,7 @@ public class AuroraAuthProperties {
     private final Auth auth = new Auth();
     private final Wechat wechat = new Wechat();
     private final Trial trial = new Trial();
+    private final Admin admin = new Admin();
 
     public Auth getAuth() {
         return auth;
@@ -22,6 +23,10 @@ public class AuroraAuthProperties {
 
     public Trial getTrial() {
         return trial;
+    }
+
+    public Admin getAdmin() {
+        return admin;
     }
 
     public static class Auth {
@@ -122,6 +127,86 @@ public class AuroraAuthProperties {
 
         public boolean isHmacConfigured() {
             return hmacSecret != null && !hmacSecret.isBlank();
+        }
+    }
+
+    /**
+     * Per-app admin login (username + bcrypt password hash). Not linked to WeChat users.
+     * Only apps explicitly configured here may use admin login.
+     */
+    public static class Admin {
+        private Duration sessionTtl = Duration.ofDays(7);
+        /** Failed password attempts allowed per bucket per window. */
+        private int rateLimitPerWindow = 10;
+        private Duration rateLimitWindow = Duration.ofMinutes(15);
+        private Map<String, AdminCredentials> apps = new LinkedHashMap<>();
+
+        public Duration getSessionTtl() {
+            return sessionTtl;
+        }
+
+        public void setSessionTtl(Duration sessionTtl) {
+            this.sessionTtl = sessionTtl;
+        }
+
+        public int getRateLimitPerWindow() {
+            return rateLimitPerWindow;
+        }
+
+        public void setRateLimitPerWindow(int rateLimitPerWindow) {
+            this.rateLimitPerWindow = rateLimitPerWindow;
+        }
+
+        public Duration getRateLimitWindow() {
+            return rateLimitWindow;
+        }
+
+        public void setRateLimitWindow(Duration rateLimitWindow) {
+            this.rateLimitWindow = rateLimitWindow;
+        }
+
+        public Map<String, AdminCredentials> getApps() {
+            return apps;
+        }
+
+        public void setApps(Map<String, AdminCredentials> apps) {
+            this.apps = apps != null ? apps : new LinkedHashMap<>();
+        }
+    }
+
+    public static class AdminCredentials {
+        private String username = "";
+        /** BCrypt hash only — never store plaintext passwords. */
+        private String passwordHash = "";
+        private boolean enabled = false;
+
+        public String getUsername() {
+            return username;
+        }
+
+        public void setUsername(String username) {
+            this.username = username;
+        }
+
+        public String getPasswordHash() {
+            return passwordHash;
+        }
+
+        public void setPasswordHash(String passwordHash) {
+            this.passwordHash = passwordHash;
+        }
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public boolean isComplete() {
+            return username != null && !username.isBlank()
+                    && passwordHash != null && !passwordHash.isBlank();
         }
     }
 }

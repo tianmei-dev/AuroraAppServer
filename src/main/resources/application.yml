@@ -59,6 +59,16 @@ logging:
 aurora:
   auth:
     session-ttl: 7d
+  # Admin login: set username + BCrypt password-hash via env. enabled=false disables login and sessions.
+  admin:
+    session-ttl: 7d
+    rate-limit-per-window: 10
+    rate-limit-window: 15m
+    apps:
+      calculator_vault:
+        username: ${ADMIN_CV_USERNAME:}
+        password-hash: ${ADMIN_CV_PASSWORD_HASH:}
+        enabled: ${ADMIN_CV_ENABLED:false}
   wechat:
     apps:
       calculator_vault:
